@@ -75,6 +75,9 @@ async function loadChatSessionDetail(sessionId) {
         updateChatHeader(session.title);
         enableChatInput();
 
+        // Tự động scroll xuống dưới cùng khi load session
+        scrollToBottom();
+
     } catch (error) {
         console.error('Error loading chat session:', error);
         showErrorMessage('Failed to load chat session');
