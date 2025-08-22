@@ -106,6 +106,27 @@
         </div>
     </div>
 
+    <!-- Image Zoom Modal -->
+    <div id="imageZoomModal" class="modal image-zoom-modal">
+        <div class="modal-content image-zoom-content">
+            <div class="modal-header">
+                <h3>Hình ảnh</h3>
+                <span class="close" onclick="closeImageZoomModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="image-zoom-container">
+                    <img id="zoomedImage" src="" alt="Hình ảnh phóng to">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeImageZoomModal()">Đóng</button>
+                <a id="downloadImageLink" href="" download class="btn-primary">
+                    <i class="fas fa-download"></i> Tải xuống
+                </a>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 

@@ -338,6 +338,17 @@ function addMessageToChat(type, text, time, messageId = null) {
 
     chatMessages.appendChild(messageDiv);
 
+    // Add click listeners to images if this is an AI message with images
+    if (type === 'ai') {
+        setTimeout(() => {
+            const images = messageDiv.querySelectorAll('img');
+            images.forEach(img => {
+                img.removeEventListener('click', handleImageClick);
+                img.addEventListener('click', handleImageClick);
+            });
+        }, 100);
+    }
+
     return messageDiv;
 }
 
@@ -483,6 +494,15 @@ function updateAIMessage(messageId, text) {
         const messageText = messageDiv.querySelector('.message-text');
         if (messageText) {
             messageText.innerHTML = md.render(text);
+
+            // Add click listeners to new images
+            setTimeout(() => {
+                const images = messageText.querySelectorAll('img');
+                images.forEach(img => {
+                    img.removeEventListener('click', handleImageClick);
+                    img.addEventListener('click', handleImageClick);
+                });
+            }, 100);
         }
     }
 }
@@ -519,3 +539,75 @@ setInterval(() => {
         loadChatSessions();
     }
 }, 30000);
+
+// Image Zoom Functions
+function openImageZoomModal(imageSrc, imageAlt) {
+    const modal = document.getElementById('imageZoomModal');
+    const zoomedImage = document.getElementById('zoomedImage');
+    const downloadLink = document.getElementById('downloadImageLink');
+
+    // Set image source and alt
+    zoomedImage.src = imageSrc;
+    zoomedImage.alt = imageAlt || 'Hình ảnh phóng to';
+
+    // Set download link
+    downloadLink.href = imageSrc;
+    downloadLink.download = `hivespace-image-${Date.now()}.jpg`;
+
+    // Show modal
+    modal.style.display = 'block';
+
+    // Add click outside to close
+    modal.onclick = function (event) {
+        if (event.target === modal) {
+            closeImageZoomModal();
+        }
+    };
+}
+
+function closeImageZoomModal() {
+    const modal = document.getElementById('imageZoomModal');
+    modal.style.display = 'none';
+}
+
+// Add click event listeners to images after rendering
+function addImageClickListeners() {
+    const images = document.querySelectorAll('.chat-messages img');
+    images.forEach(img => {
+        // Remove existing listeners to avoid duplicates
+        img.removeEventListener('click', handleImageClick);
+        // Add new listener
+        img.addEventListener('click', handleImageClick);
+    });
+}
+
+function handleImageClick(event) {
+    const img = event.target;
+    openImageZoomModal(img.src, img.alt);
+}
+
+// Override the existing renderChatMessages function to add image listeners
+function renderChatMessages(messages) {
+    const chatMessages = document.getElementById('chatMessages');
+    chatMessages.innerHTML = '';
+
+    if (!messages || messages.length === 0) {
+        chatMessages.innerHTML = `
+            <div class="welcome-message">
+                <div class="welcome-icon">
+                    <i class="fas fa-hive"></i>
+                </div>
+                <h3>Welcome to HiveSpace</h3>
+                <p>Start a conversation to begin chatting with our AI assistant.</p>
+            </div>
+        `;
+        return;
+    }
+
+    messages.forEach(message => {
+        addMessageToChat(message.type, message.text, message.timestamp, message.id);
+    });
+
+    // Add click listeners to images after rendering
+    setTimeout(addImageClickListeners, 100);
+}

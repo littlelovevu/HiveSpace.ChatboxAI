@@ -143,16 +143,23 @@ def is_invoice_image_request(text: str) -> bool:
 def build_invoice_image_markdown(prompt: str, width: int = 400, height: int = 600) -> str:
     """Tạo markdown hiển thị 1 ảnh hóa đơn với thông tin đơn hàng từ database."""
     import urllib.parse
-    # Chuẩn hoá prompt: hóa đơn, thông tin đơn hàng, kích thước nhỏ gọn
-    style_suffix = (
-        " | invoice receipt layout, order information, customer details, product list,"
-        " total amount, payment method, shipping address, minimalist design,"
-        " plain white background, no decorative elements, business document style"
+    
+    # Tạo prompt đơn giản, chỉ tập trung vào thông tin hóa đơn
+    # Loại bỏ các yếu tố trang trí phức tạp
+    clean_prompt = (
+        "simple invoice receipt, plain white background, black text, "
+        "order details, customer information, product list, total amount, "
+        "clean business document, no decorations, no colors, minimal design"
     )
-    final_prompt = f"{prompt}{style_suffix}"
+    
+    # Kết hợp prompt của user với style đơn giản
+    final_prompt = f"{prompt}, {clean_prompt}"
     encoded = urllib.parse.quote_plus(final_prompt)
-    seed = "hivespace-invoice"
+    
+    # Sử dụng seed cố định để có style nhất quán
+    seed = "hivespace-clean-invoice"
     url = f"https://image.pollinations.ai/prompt/{encoded}?seed={seed}&width={width}&height={height}"
+    
     md = f"![Hóa đơn đơn hàng]({url})"
     caption = f"\n\n> Hóa đơn đơn hàng theo yêu cầu: \"{prompt}\" (kích thước: {width}x{height})"
     return md + caption
@@ -287,10 +294,10 @@ async def send_message(request: NewMessageRequest):
             recent_messages = session["messages"][-20:] if len(session["messages"]) > 0 else []
             # Chuyển đổi định dạng tin nhắn sang format mà agent mong đợi
             history = []
-            # Thêm system prompt
+                        # Thêm system prompt
             history.append({
                 "role": "system",
-                                        "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
+                "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
 
 Bạn có khả năng:
 1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất
@@ -301,7 +308,7 @@ Bạn có khả năng:
 Khi người dùng hỏi về sản phẩm, hãy sử dụng product_search tool để tìm thông tin chi tiết.
 Khi cần thông tin mới nhất, hãy sử dụng web_search tool để tìm kiếm trên internet.
 Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng.
-Khi người dùng yêu cầu tạo hình ảnh hóa đơn/đơn hàng, tôi sẽ tạo hóa đơn với kích thước 400x600.
+Khi người dùng yêu cầu tạo hình ảnh hóa đơn/đơn hàng, tôi sẽ tạo hóa đơn đơn giản với background trắng, text đen, không trang trí, kích thước 400x600.
 Khi người dùng yêu cầu tạo hình ảnh khác, tôi sẽ tạo hình ảnh tổng quát với kích thước 512x512."""
             })
             history.append({
@@ -403,9 +410,9 @@ async def send_message_stream(request: NewMessageRequest):
             # Chuẩn bị lịch sử hội thoại (tối đa 20 tin nhắn gần nhất)
             recent_messages = session["messages"][-20:] if len(session["messages"]) > 0 else []
             history = [
-                {
+                                {
                     "role": "system",
-                                            "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
+                    "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
 
 Bạn có khả năng:
 1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất
@@ -416,7 +423,7 @@ Bạn có khả năng:
 Khi người dùng hỏi về sản phẩm, hãy sử dụng product_search tool để tìm thông tin chi tiết.
 Khi cần thông tin mới nhất, hãy sử dụng web_search tool để tìm kiếm trên internet.
 Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng.
-Khi người dùng yêu cầu tạo hình ảnh hóa đơn/đơn hàng, tôi sẽ tạo hóa đơn với kích thước 400x600.
+Khi người dùng yêu cầu tạo hình ảnh hóa đơn/đơn hàng, tôi sẽ tạo hóa đơn đơn giản với background trắng, text đen, không trang trí, kích thước 400x600.
 Khi người dùng yêu cầu tạo hình ảnh khác, tôi sẽ tạo hình ảnh tổng quát với kích thước 512x512."""
                 },
                 {
