@@ -1,133 +1,268 @@
-// Chat sessions data
-let chatSessions = [
-    {
-        id: 0,
-        title: "General Support",
-        icon: "fas fa-comments",
-        lastActivity: "2 min ago",
-        messages: [
-            {
-                type: "ai",
-                text: "Hello! Welcome to HiveSpace. I'm your AI assistant, ready to help you with any questions about our products, orders, or general support. How can I assist you today?",
-                time: "Just now"
-            }
-        ]
-    },
-    {
-        id: 1,
-        title: "Order Inquiry",
-        icon: "fas fa-shopping-cart",
-        lastActivity: "1 hour ago",
-        messages: [
-            {
-                type: "ai",
-                text: "Hi there! I can help you with your order. What would you like to know?",
-                time: "1 hour ago"
-            }
-        ]
-    },
-    {
-        id: 2,
-        title: "Product Info",
-        icon: "fas fa-box",
-        lastActivity: "3 hours ago",
-        messages: [
-            {
-                type: "ai",
-                text: "Welcome! I'm here to provide detailed information about our products. What would you like to learn about?",
-                time: "3 hours ago"
-            }
-        ]
-    }
-];
+// HiveSpace Chatbox - API Integration
+// Biến global để lưu trạng thái
+let currentSessionId = null;
+let chatSessions = [];
+let isLoading = false;
 
-let currentSessionId = 0;
+// API Base URL
+const API_BASE_URL = 'http://localhost:8000';
 
-// Initialize the chat
+// Khởi tạo ứng dụng
 document.addEventListener('DOMContentLoaded', function () {
-    updateChatDisplay();
+    loadChatSessions();
+    setupEventListeners();
     autoResizeTextarea();
 });
 
-// Switch between chat sessions
-function switchSession(sessionId) {
-    // Remove active class from all sessions
-    document.querySelectorAll('.session-item').forEach(item => {
-        item.classList.remove('active');
+// Thiết lập event listeners
+function setupEventListeners() {
+    // Close modal khi click bên ngoài
+    window.onclick = function (event) {
+        const modal = document.getElementById('newChatModal');
+        if (event.target === modal) {
+            closeNewChatModal();
+        }
+    }
+}
+
+// API Functions
+async function loadChatSessions() {
+    try {
+        isLoading = true;
+        showLoadingState();
+
+        const response = await fetch(`${API_BASE_URL}/api/sessions`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        chatSessions = await response.json();
+        // Sắp xếp theo thời gian mới nhất lên đầu
+        chatSessions.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        renderChatSessions();
+
+        // Tự động chọn session đầu tiên nếu có
+        if (chatSessions.length > 0 && !currentSessionId) {
+            switchSession(chatSessions[0].id);
+        }
+
+    } catch (error) {
+        console.error('Error loading chat sessions:', error);
+        showErrorMessage('Failed to load chat sessions');
+    } finally {
+        isLoading = false;
+        hideLoadingState();
+    }
+}
+
+async function loadChatSessionDetail(sessionId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const session = await response.json();
+        renderChatMessages(session.messages);
+        updateChatHeader(session.title);
+        enableChatInput();
+
+    } catch (error) {
+        console.error('Error loading chat session:', error);
+        showErrorMessage('Failed to load chat session');
+    }
+}
+
+async function createNewChatSession(title) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/sessions/new`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ title })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const newSession = await response.json();
+
+        // Thêm session mới vào danh sách và sắp xếp lại
+        chatSessions.unshift(newSession);
+        chatSessions.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+        renderChatSessions();
+
+        // Chuyển đến session mới
+        switchSession(newSession.id);
+
+        // Đóng modal
+        closeNewChatModal();
+
+        return newSession;
+
+    } catch (error) {
+        console.error('Error creating new chat session:', error);
+        showErrorMessage('Failed to create new chat session');
+        return null;
+    }
+}
+
+async function sendMessageToAPI(message) {
+    if (!currentSessionId) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/messages/send`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                session_id: currentSessionId,
+                message: message
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Cập nhật UI với tin nhắn mới
+            addMessageToChat('user', message, formatTime(new Date()));
+            addMessageToChat('ai', result.ai_response.text, formatTime(new Date()));
+
+            // Cập nhật danh sách sessions
+            await loadChatSessions();
+
+            // Scroll xuống cuối
+            scrollToBottom();
+        }
+
+    } catch (error) {
+        console.error('Error sending message:', error);
+        showErrorMessage('Failed to send message');
+    }
+}
+
+async function clearChatSession(sessionId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/clear`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        // Reload session detail
+        await loadChatSessionDetail(sessionId);
+
+        // Cập nhật danh sách sessions
+        await loadChatSessions();
+
+        showSuccessMessage('Chat cleared successfully');
+
+    } catch (error) {
+        console.error('Error clearing chat session:', error);
+        showErrorMessage('Failed to clear chat session');
+    }
+}
+
+async function exportChatSession(sessionId) {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/export`);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Tạo và download file
+            const blob = new Blob([result.content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = result.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            showSuccessMessage('Chat exported successfully');
+        }
+
+    } catch (error) {
+        console.error('Error exporting chat session:', error);
+        showErrorMessage('Failed to export chat session');
+    }
+}
+
+// UI Functions
+function renderChatSessions() {
+    const sessionsContainer = document.getElementById('chatSessions');
+    sessionsContainer.innerHTML = '';
+
+    if (chatSessions.length === 0) {
+        sessionsContainer.innerHTML = `
+            <div class="no-sessions">
+                <p>No chat sessions yet</p>
+                <small>Start a new conversation to begin</small>
+            </div>
+        `;
+        return;
+    }
+
+    chatSessions.forEach(session => {
+        const sessionElement = document.createElement('div');
+        sessionElement.className = `session-item ${session.id === currentSessionId ? 'active' : ''}`;
+        sessionElement.setAttribute('data-session-id', session.id);
+        sessionElement.onclick = () => switchSession(session.id);
+
+        sessionElement.innerHTML = `
+            <span>${session.title}</span>
+            <small>${session.last_activity}</small>
+        `;
+
+        sessionsContainer.appendChild(sessionElement);
     });
-
-    // Add active class to selected session
-    document.querySelectorAll('.session-item')[sessionId].classList.add('active');
-
-    // Update current session
-    currentSessionId = sessionId;
-
-    // Update chat display
-    updateChatDisplay();
-
-    // Update chat title
-    const session = chatSessions[sessionId];
-    document.querySelector('.chat-title h3').textContent = session.title;
 }
 
-// Start a new chat session
-function startNewChat() {
-    const newSession = {
-        id: chatSessions.length,
-        title: `New Chat ${chatSessions.length + 1}`,
-        icon: "fas fa-comments",
-        lastActivity: "Just now",
-        messages: [
-            {
-                type: "ai",
-                text: "Hello! I'm your HiveSpace AI assistant. How can I help you today?",
-                time: "Just now"
-            }
-        ]
-    };
-
-    chatSessions.push(newSession);
-
-    // Add new session to sidebar
-    addSessionToSidebar(newSession);
-
-    // Switch to new session
-    switchSession(newSession.id);
-}
-
-// Add new session to sidebar
-function addSessionToSidebar(session) {
-    const sessionsContainer = document.querySelector('.chat-sessions');
-    const sessionElement = document.createElement('div');
-    sessionElement.className = 'session-item';
-    sessionElement.onclick = () => switchSession(session.id);
-
-    sessionElement.innerHTML = `
-        <i class="${session.icon}"></i>
-        <span>${session.title}</span>
-        <small>${session.lastActivity}</small>
-    `;
-
-    sessionsContainer.appendChild(sessionElement);
-}
-
-// Update chat display
-function updateChatDisplay() {
+function renderChatMessages(messages) {
     const chatMessages = document.getElementById('chatMessages');
-    const session = chatSessions[currentSessionId];
-
     chatMessages.innerHTML = '';
 
-    session.messages.forEach(message => {
-        addMessageToChat(message.type, message.text, message.time);
-    });
+    if (!messages || messages.length === 0) {
+        chatMessages.innerHTML = `
+            <div class="welcome-message">
+                <div class="welcome-icon">
+                    <i class="fas fa-hive"></i>
+                </div>
+                <h3>Start a conversation</h3>
+                <p>Type your first message to begin chatting with our AI assistant.</p>
+            </div>
+        `;
+        return;
+    }
 
-    scrollToBottom();
+    messages.forEach(message => {
+        addMessageToChat(message.type, message.text, formatTime(new Date(message.timestamp)));
+    });
 }
 
-// Add message to chat
 function addMessageToChat(type, text, time) {
     const chatMessages = document.getElementById('chatMessages');
+
+    // Xóa welcome message nếu có
+    const welcomeMessage = chatMessages.querySelector('.welcome-message');
+    if (welcomeMessage) {
+        welcomeMessage.remove();
+    }
+
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}-message`;
 
@@ -146,90 +281,103 @@ function addMessageToChat(type, text, time) {
     chatMessages.appendChild(messageDiv);
 }
 
-// Send message
+function updateChatHeader(title) {
+    document.getElementById('chatTitle').textContent = title;
+}
+
+function enableChatInput() {
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.querySelector('.send-btn');
+
+    messageInput.disabled = false;
+    messageInput.placeholder = "Type your message here...";
+    sendBtn.disabled = false;
+}
+
+function disableChatInput() {
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.querySelector('.send-btn');
+
+    messageInput.disabled = true;
+    messageInput.placeholder = "Select a chat session to start messaging...";
+    sendBtn.disabled = true;
+}
+
+// Event Handlers
+function switchSession(sessionId) {
+    // Cập nhật active state
+    document.querySelectorAll('.session-item').forEach(item => {
+        item.classList.remove('active');
+    });
+
+    // Tìm session item theo sessionId
+    const activeItem = document.querySelector(`[data-session-id="${sessionId}"]`);
+    if (activeItem) {
+        activeItem.classList.add('active');
+    }
+
+    // Cập nhật current session
+    currentSessionId = sessionId;
+
+    // Load session detail
+    loadChatSessionDetail(sessionId);
+}
+
+function startNewChat() {
+    document.getElementById('newChatModal').style.display = 'block';
+    document.getElementById('newChatTitle').focus();
+}
+
+function closeNewChatModal() {
+    document.getElementById('newChatModal').style.display = 'none';
+    document.getElementById('newChatTitle').value = 'Chat mới';
+}
+
+function createNewChat() {
+    const title = document.getElementById('newChatTitle').value.trim();
+
+    if (!title) {
+        showErrorMessage('Vui lòng nhập tiêu đề chat');
+        return;
+    }
+
+    createNewChatSession(title);
+}
+
 function sendMessage() {
     const messageInput = document.getElementById('messageInput');
     const message = messageInput.value.trim();
 
-    if (message === '') return;
-
-    // Add user message
-    const userMessage = {
-        type: "user",
-        text: message,
-        time: getCurrentTime()
-    };
-
-    chatSessions[currentSessionId].messages.push(userMessage);
-    addMessageToChat("user", message, userMessage.time);
+    if (!message || !currentSessionId) return;
 
     // Clear input
     messageInput.value = '';
     messageInput.style.height = 'auto';
 
-    // Update last activity
-    chatSessions[currentSessionId].lastActivity = "Just now";
-    updateSessionActivity();
-
-    // Simulate AI response
-    setTimeout(() => {
-        const aiResponse = generateAIResponse(message);
-        const aiMessage = {
-            type: "ai",
-            text: aiResponse,
-            time: getCurrentTime()
-        };
-
-        chatSessions[currentSessionId].messages.push(aiMessage);
-        addMessageToChat("ai", aiResponse, aiMessage.time);
-
-        scrollToBottom();
-    }, 1000);
-
-    scrollToBottom();
+    // Send message via API
+    sendMessageToAPI(message);
 }
 
-// Generate AI response (simulated)
-function generateAIResponse(userMessage) {
-    const responses = [
-        "Thank you for your message! I understand you're asking about that. Let me help you with more details.",
-        "That's a great question! Based on what you've shared, I can provide you with the following information.",
-        "I appreciate you reaching out about this. Here's what I can tell you based on your inquiry.",
-        "Thanks for asking! This is something I can definitely help you with. Let me break it down for you.",
-        "Excellent question! I have some helpful information that should address your concerns."
-    ];
-
-    // Simple keyword-based responses
-    if (userMessage.toLowerCase().includes('order') || userMessage.toLowerCase().includes('purchase')) {
-        return "I can help you with your order! Please provide your order number or email address so I can look up the details for you.";
-    } else if (userMessage.toLowerCase().includes('product') || userMessage.toLowerCase().includes('item')) {
-        return "I'd be happy to tell you more about our products! Which specific product are you interested in learning about?";
-    } else if (userMessage.toLowerCase().includes('price') || userMessage.toLowerCase().includes('cost')) {
-        return "I can help you with pricing information! Could you specify which product or service you're asking about?";
-    } else if (userMessage.toLowerCase().includes('shipping') || userMessage.toLowerCase().includes('delivery')) {
-        return "Great question about shipping! Our standard delivery takes 3-5 business days. Would you like to know about expedited options?";
-    } else if (userMessage.toLowerCase().includes('return') || userMessage.toLowerCase().includes('refund')) {
-        return "I understand you're asking about returns. We have a 30-day return policy for most items. What specific item are you looking to return?";
+function clearCurrentChat() {
+    if (!currentSessionId) {
+        showErrorMessage('No active chat session');
+        return;
     }
 
-    return responses[Math.floor(Math.random() * responses.length)];
+    if (confirm('Are you sure you want to clear this chat?')) {
+        clearChatSession(currentSessionId);
+    }
 }
 
-// Get current time
-function getCurrentTime() {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+function exportCurrentChat() {
+    if (!currentSessionId) {
+        showErrorMessage('No active chat session');
+        return;
+    }
+
+    exportChatSession(currentSessionId);
 }
 
-// Update session activity in sidebar
-function updateSessionActivity() {
-    const sessionItems = document.querySelectorAll('.session-item');
-    sessionItems[currentSessionId].querySelector('small').textContent = "Just now";
-}
-
-// Handle Enter key press
 function handleKeyPress(event) {
     if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
@@ -237,7 +385,24 @@ function handleKeyPress(event) {
     }
 }
 
-// Auto-resize textarea
+// Utility Functions
+function formatTime(date) {
+    const now = new Date();
+    const diff = now - date;
+
+    if (diff < 60000) { // Less than 1 minute
+        return 'Just now';
+    } else if (diff < 3600000) { // Less than 1 hour
+        const minutes = Math.floor(diff / 60000);
+        return `${minutes} min ago`;
+    } else if (diff < 86400000) { // Less than 1 day
+        const hours = Math.floor(diff / 3600000);
+        return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    } else {
+        return date.toLocaleDateString();
+    }
+}
+
 function autoResizeTextarea() {
     const textarea = document.getElementById('messageInput');
     textarea.addEventListener('input', function () {
@@ -246,48 +411,33 @@ function autoResizeTextarea() {
     });
 }
 
-// Scroll to bottom of chat
 function scrollToBottom() {
     const chatMessages = document.getElementById('chatMessages');
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Clear chat
-document.addEventListener('DOMContentLoaded', function () {
-    const clearBtn = document.querySelector('.action-btn[title="Clear Chat"]');
-    if (clearBtn) {
-        clearBtn.addEventListener('click', function () {
-            if (confirm('Are you sure you want to clear this chat?')) {
-                chatSessions[currentSessionId].messages = [
-                    {
-                        type: "ai",
-                        text: "Chat cleared. How can I help you today?",
-                        time: getCurrentTime()
-                    }
-                ];
-                updateChatDisplay();
-            }
-        });
-    }
-});
+// Loading and Error States
+function showLoadingState() {
+    // Có thể thêm loading spinner
+}
 
-// Export chat (placeholder functionality)
-document.addEventListener('DOMContentLoaded', function () {
-    const exportBtn = document.querySelector('.action-btn[title="Export Chat"]');
-    if (exportBtn) {
-        exportBtn.addEventListener('click', function () {
-            const session = chatSessions[currentSessionId];
-            const chatText = session.messages.map(msg =>
-                `${msg.type.toUpperCase()}: ${msg.text} (${msg.time})`
-            ).join('\n\n');
+function hideLoadingState() {
+    // Ẩn loading spinner
+}
 
-            const blob = new Blob([chatText], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `hivespace-chat-${session.title.replace(/\s+/g, '-')}.txt`;
-            a.click();
-            URL.revokeObjectURL(url);
-        });
+function showErrorMessage(message) {
+    // Hiển thị error message
+    alert(`Error: ${message}`);
+}
+
+function showSuccessMessage(message) {
+    // Hiển thị success message
+    alert(`Success: ${message}`);
+}
+
+// Auto-refresh sessions every 30 seconds
+setInterval(() => {
+    if (chatSessions.length > 0) {
+        loadChatSessions();
     }
-});
+}, 30000);
