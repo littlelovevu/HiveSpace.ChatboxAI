@@ -11,6 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from .tools.web_search import web_search
 from .tools.product_tool import product_search
 from .tools.order_tool import order_search
+from .tools.image_tool import generate_image
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -63,7 +64,7 @@ class HiveSpaceAgent:
         )
         
         # Bind tools to the model
-        self.react_agent = self.llm.bind_tools([web_search, product_search, order_search])
+        self.react_agent = self.llm.bind_tools([web_search, product_search, order_search, generate_image])
         
         # Khởi tạo workflow graph
         self._setup_workflow()
@@ -74,7 +75,7 @@ class HiveSpaceAgent:
         graph_builder = StateGraph(State)
         
         # Định nghĩa tools
-        tools = [web_search, product_search, order_search]
+        tools = [web_search, product_search, order_search, generate_image]
         tools_by_name = {tool.name: tool for tool in tools}
         
         # Định nghĩa tool node

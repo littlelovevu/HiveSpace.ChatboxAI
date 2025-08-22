@@ -12,6 +12,7 @@ from datetime import datetime
 import uuid
 import json
 from agents.agent import create_agent
+from agents.tools.image_tool import build_invoice_image_markdown, build_general_image_markdown
 
 # Khởi tạo FastAPI app
 app = FastAPI(
@@ -140,42 +141,9 @@ def is_invoice_image_request(text: str) -> bool:
     
     return has_invoice and has_image
 
-def build_invoice_image_markdown(prompt: str, width: int = 400, height: int = 600) -> str:
-    """Tạo markdown hiển thị 1 ảnh hóa đơn với thông tin đơn hàng từ database."""
-    import urllib.parse
-    
-    # Tạo prompt đơn giản, chỉ tập trung vào thông tin hóa đơn
-    # Loại bỏ các yếu tố trang trí phức tạp
-    clean_prompt = (
-        "simple invoice receipt, plain white background, black text, "
-        "order details, customer information, product list, total amount, "
-        "clean business document, no decorations, no colors, minimal design"
-    )
-    
-    # Kết hợp prompt của user với style đơn giản
-    final_prompt = f"{prompt}, {clean_prompt}"
-    encoded = urllib.parse.quote_plus(final_prompt)
-    
-    # Sử dụng seed cố định để có style nhất quán
-    seed = "hivespace-clean-invoice"
-    url = f"https://image.pollinations.ai/prompt/{encoded}?seed={seed}&width={width}&height={height}"
-    
-    md = f"![Hóa đơn đơn hàng]({url})"
-    caption = f"\n\n> Hóa đơn đơn hàng theo yêu cầu: \"{prompt}\" (kích thước: {width}x{height})"
-    return md + caption
-
-def build_general_image_markdown(prompt: str, width: int = 512, height: int = 512) -> str:
-    """Tạo markdown hiển thị 1 ảnh tổng quát theo yêu cầu của người dùng."""
-    import urllib.parse
-    # Giữ nguyên prompt của người dùng, chỉ thêm chất lượng cao
-    style_suffix = " | high quality, detailed, clear"
-    final_prompt = f"{prompt}{style_suffix}"
-    encoded = urllib.parse.quote_plus(final_prompt)
-    seed = "hivespace-general"
-    url = f"https://image.pollinations.ai/prompt/{encoded}?seed={seed}&width={width}&height={height}"
-    md = f"![{prompt}]({url})"
-    caption = f"\n\n> Hình ảnh theo yêu cầu: \"{prompt}\" (kích thước: {width}x{height})"
-    return md + caption
+"""Image helpers moved to agents.tools.image_tool.
+We import and reuse them here to avoid duplication and keep main.py slim.
+"""
 
 def generate_ai_response(user_message: str) -> str:
     """Tạo phản hồi AI sử dụng HiveSpace Agent"""
