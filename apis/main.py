@@ -14,6 +14,8 @@ import json
 import os
 from agents.agent import create_agent
 from agents.tools.image_tool import build_general_image_markdown, build_invoice_html, invoice_html_to_image
+import json
+import os
 
 # Khởi tạo FastAPI app
 app = FastAPI(
@@ -127,6 +129,106 @@ def load_ai_system_prompt():
 
 # Nạp prompt ngay khi khởi động
 load_ai_system_prompt()
+
+PRODUCTS_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "database", "products.json")
+
+def _ensure_products_db_dir():
+    try:
+        os.makedirs(os.path.dirname(PRODUCTS_DB_PATH), exist_ok=True)
+    except Exception:
+        pass
+
+def load_imported_products():
+    """Load products imported from txt into JSON store."""
+    try:
+        if not os.path.exists(PRODUCTS_DB_PATH):
+            return []
+        with open(PRODUCTS_DB_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+def save_imported_products(products):
+    """Persist imported products to JSON store (list of dicts)."""
+    _ensure_products_db_dir()
+    with open(PRODUCTS_DB_PATH, "w", encoding="utf-8") as f:
+        json.dump(products, f, ensure_ascii=False, indent=2)
+
+def import_products_from_txt(file_content: bytes):
+    """Parse .txt content and append products into JSON store.
+
+    Supported formats (UTF-8 text):
+    - CSV header: name,price,category,brand,in_stock,rating
+      Example line: SmartHome Hub Pro,199,Home & Garden,Acme,true,4.6
+    - Pipe-delimited header: name|price|category|brand|in_stock|rating
+    Booleans: true/false/1/0/yes/no. Missing rating defaults to 0.0.
+    """
+    try:
+        text = file_content.decode("utf-8", errors="ignore").strip()
+    except Exception:
+        return {"success": False, "message": "Không đọc được nội dung file .txt"}
+
+    if not text:
+        return {"success": False, "message": "File .txt rỗng"}
+
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    if not lines:
+        return {"success": False, "message": "File .txt không có dữ liệu"}
+
+    header = lines[0].lower().replace(" ", "")
+    delimiter = "," if "," in lines[0] else ("|" if "|" in lines[0] else None)
+    expected_headers = ["name,price,category,brand,in_stock,rating", "name|price|category|brand|in_stock|rating"]
+    if delimiter is None or header not in expected_headers:
+        return {"success": False, "message": "Định dạng không hợp lệ. Cần header: name,price,category,brand,in_stock,rating"}
+
+    def to_bool(v: str) -> bool:
+        v = v.strip().lower()
+        return v in ("true", "1", "yes", "y")
+
+    imported = []
+    for line in lines[1:]:
+        parts = [p.strip() for p in line.split(delimiter)]
+        if len(parts) < 5:
+            continue
+        name = parts[0]
+        try:
+            price = float(parts[1])
+        except Exception:
+            continue
+        category = parts[2] if len(parts) > 2 else "Others"
+        brand = parts[3] if len(parts) > 3 else "Unknown"
+        in_stock = to_bool(parts[4]) if len(parts) > 4 else True
+        rating = 0.0
+        if len(parts) > 5 and parts[5] != "":
+            try:
+                rating = float(parts[5])
+            except Exception:
+                rating = 0.0
+
+        imported.append({
+            "name": name,
+            "price": price,
+            "category": category,
+            "brand": brand,
+            "in_stock": in_stock,
+            "rating": rating,
+        })
+
+    if not imported:
+        return {"success": False, "message": "Không có dòng dữ liệu hợp lệ"}
+
+    existing = load_imported_products()
+    # Assign IDs after merge to avoid collision with built-in (1..100)
+    current_max_id = max([p.get("id", 100) for p in existing] + [100])
+    for item in imported:
+        current_max_id += 1
+        item["id"] = current_max_id
+        existing.append(item)
+
+    save_imported_products(existing)
+    names = ", ".join([p["name"] for p in imported])
+    return {"success": True, "count": len(imported), "names": names}
 
 def update_session_activity(session_id: str):
     """Cập nhật thời gian hoạt động của phiên chat"""
@@ -786,19 +888,28 @@ async def process_general_file(file: UploadFile, file_content: bytes, user_reque
             ai_response += "**💡 Bạn muốn tôi làm gì với file Word này?**"
             
         elif file.content_type == "text/plain":
-            try:
-                text_content = file_content.decode('utf-8')
-                ai_response += "**📃 Đây là file text:**\n"
-                ai_response += "• Tôi có thể phân tích nội dung\n"
-                ai_response += "• Tóm tắt văn bản\n"
-                ai_response += "• Trích xuất thông tin quan trọng\n\n"
-                ai_response += "**📖 Nội dung file:**\n```\n{text_content[:200]}{'...' if len(text_content) > 200 else ''}\n```\n\n"
-                ai_response += "**💡 Bạn muốn tôi phân tích gì trong file text này?**"
-            except UnicodeDecodeError:
-                ai_response += "**⚠️ Lưu ý:** File text này có vấn đề về encoding.\n"
-                ai_response += "• Tôi có thể giúp chuyển đổi encoding\n"
-                ai_response += "• Hoặc phân tích phần có thể đọc được\n\n"
-                ai_response += "**💡 Bạn muốn tôi làm gì với file này?**"
+            # Thử nhập sản phẩm từ file .txt nếu đúng định dạng
+            result = import_products_from_txt(file_content)
+            if result.get("success"):
+                ai_response += "**🛒 ĐÃ THÊM SẢN PHẨM TỪ FILE .TXT**\n\n"
+                ai_response += f"• Số lượng thêm mới: {result['count']}\n"
+                ai_response += f"• Tên sản phẩm: {result['names']}\n\n"
+                ai_response += "Bạn có thể dùng product_search để tìm các sản phẩm vừa thêm."
+            else:
+                try:
+                    text_content = file_content.decode('utf-8')
+                    ai_response += "**📃 Đây là file text:**\n"
+                    ai_response += "• Tôi có thể phân tích nội dung\n"
+                    ai_response += "• Tóm tắt văn bản\n"
+                    ai_response += "• Trích xuất thông tin quan trọng\n\n"
+                    ai_response += f"**ℹ️ Gợi ý:** Để thêm sản phẩm qua .txt, hãy dùng header: name,price,category,brand,in_stock,rating và mỗi dòng 1 sản phẩm.\n\n"
+                    ai_response += f"**📖 Nội dung file (preview):**\n```\n{text_content[:200]}{'...' if len(text_content) > 200 else ''}\n```\n\n"
+                    ai_response += "**💡 Bạn muốn tôi phân tích gì trong file text này?**"
+                except UnicodeDecodeError:
+                    ai_response += "**⚠️ Lưu ý:** File text này có vấn đề về encoding.\n"
+                    ai_response += "• Tôi có thể giúp chuyển đổi encoding\n"
+                    ai_response += "• Hoặc phân tích phần có thể đọc được\n\n"
+                    ai_response += "**💡 Bạn muốn tôi làm gì với file này?**"
         
         else:
             ai_response += "**📁 Đây là file đặc biệt:**\n"

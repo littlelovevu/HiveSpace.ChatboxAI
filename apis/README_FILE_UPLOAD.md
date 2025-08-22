@@ -1,3 +1,37 @@
+# Hướng dẫn thêm sản phẩm bằng file .txt
+
+Để thêm sản phẩm vào cơ sở dữ liệu nội bộ, bạn có thể gửi file `.txt` trong khung chat (nút ghim file). Backend sẽ tự động nhận diện và nhập sản phẩm nếu file đúng định dạng.
+
+## Định dạng file
+
+File phải có header và dữ liệu dạng CSV hoặc pipe `|` với các cột sau:
+
+```
+name,price,category,brand,in_stock,rating
+```
+
+Hoặc
+
+```
+name|price|category|brand|in_stock|rating
+```
+
+Ghi chú:
+- `in_stock`: true/false/1/0/yes/no
+- `rating`: có thể bỏ trống, mặc định 0.0
+
+## Ví dụ nội dung file
+
+```
+name,price,category,brand,in_stock,rating
+SmartHome Hub Pro,199,Home & Garden,Acme,true,4.6
+Ergo Chair Plus,399,Furniture,FlexiSeat,yes,4.7
+Cyclone Vacuum S12,259,Home & Garden,AirNova,1,4.5
+Aurora 27 5K Monitor,699,Computers,Northstar,true,4.8
+Nimbus Wireless Router AX9000,329,Electronics,StormNet,true,4.4
+```
+
+Sau khi upload, các sản phẩm sẽ được lưu tại `apis/database/products.json` và có thể tìm kiếm bằng tool `product_search`.
 # 📁 HiveSpace Chatbox - Intelligent File Upload API
 
 ## 🚀 Tính năng mới: Xử lý file thông minh

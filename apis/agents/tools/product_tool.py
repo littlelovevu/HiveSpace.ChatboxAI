@@ -5,6 +5,8 @@ Viết thành một tool để về sau sử dụng gắn vào AI Agent
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 import random
+import os
+import json
 
 
 class ProductSearchInput(BaseModel):
@@ -145,6 +147,19 @@ def product_search(input: str):
         {"id": 99, "name": "Casio G-Shock", "price": 100, "category": "Fashion", "in_stock": True, "brand": "Casio", "rating": 4.5},
         {"id": 100, "name": "Swatch Originals", "price": 80, "category": "Fashion", "in_stock": True, "brand": "Swatch", "rating": 4.4}
     ]
+
+    # Nạp thêm sản phẩm đã được import qua file .txt (nếu có)
+    try:
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        products_path = os.path.join(base_dir, "apis", "database", "products.json")
+        if os.path.exists(products_path):
+            with open(products_path, "r", encoding="utf-8") as f:
+                imported = json.load(f)
+                if isinstance(imported, list):
+                    products.extend(imported)
+    except Exception:
+        # Im lặng nếu không thể nạp, tool vẫn hoạt động với dữ liệu mẫu
+        pass
     
     # Tìm kiếm sản phẩm dựa trên input
     input_lower = input.lower()

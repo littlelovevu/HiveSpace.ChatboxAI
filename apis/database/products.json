@@ -1,0 +1,146 @@
+[
+  {
+    "name": "SmartHome Hub Pro",
+    "price": 199.0,
+    "category": "Home & Garden",
+    "brand": "Acme",
+    "in_stock": true,
+    "rating": 4.6,
+    "id": 101
+  },
+  {
+    "name": "Ergo Chair Plus",
+    "price": 399.0,
+    "category": "Furniture",
+    "brand": "FlexiSeat",
+    "in_stock": true,
+    "rating": 4.7,
+    "id": 102
+  },
+  {
+    "name": "Cyclone Vacuum S12",
+    "price": 259.0,
+    "category": "Home & Garden",
+    "brand": "AirNova",
+    "in_stock": true,
+    "rating": 4.5,
+    "id": 103
+  },
+  {
+    "name": "Aurora 27 5K Monitor",
+    "price": 699.0,
+    "category": "Computers",
+    "brand": "Northstar",
+    "in_stock": true,
+    "rating": 4.8,
+    "id": 104
+  },
+  {
+    "name": "Nimbus Wireless Router AX9000",
+    "price": 329.0,
+    "category": "Electronics",
+    "brand": "StormNet",
+    "in_stock": true,
+    "rating": 4.4,
+    "id": 105
+  },
+  {
+    "name": "Trailblazer Smartwatch X",
+    "price": 289.0,
+    "category": "Fashion",
+    "brand": "PeakTech",
+    "in_stock": true,
+    "rating": 4.2,
+    "id": 106
+  },
+  {
+    "name": "PhotoMaster Prime Lens 85mm",
+    "price": 549.0,
+    "category": "Photography",
+    "brand": "OptixLab",
+    "in_stock": true,
+    "rating": 4.6,
+    "id": 107
+  },
+  {
+    "name": "Quantum Noise Cancelling Buds",
+    "price": 179.0,
+    "category": "Audio",
+    "brand": "SonicBeam",
+    "in_stock": true,
+    "rating": 4.3,
+    "id": 108
+  },
+  {
+    "name": "SmartHome Hub Pro",
+    "price": 199.0,
+    "category": "Home & Garden",
+    "brand": "Acme",
+    "in_stock": true,
+    "rating": 4.6,
+    "id": 109
+  },
+  {
+    "name": "Ergo Chair Plus",
+    "price": 399.0,
+    "category": "Furniture",
+    "brand": "FlexiSeat",
+    "in_stock": true,
+    "rating": 4.7,
+    "id": 110
+  },
+  {
+    "name": "Cyclone Vacuum S12",
+    "price": 259.0,
+    "category": "Home & Garden",
+    "brand": "AirNova",
+    "in_stock": true,
+    "rating": 4.5,
+    "id": 111
+  },
+  {
+    "name": "Aurora 27 5K Monitor",
+    "price": 699.0,
+    "category": "Computers",
+    "brand": "Northstar",
+    "in_stock": true,
+    "rating": 4.8,
+    "id": 112
+  },
+  {
+    "name": "Nimbus Wireless Router AX9000",
+    "price": 329.0,
+    "category": "Electronics",
+    "brand": "StormNet",
+    "in_stock": true,
+    "rating": 4.4,
+    "id": 113
+  },
+  {
+    "name": "Trailblazer Smartwatch X",
+    "price": 289.0,
+    "category": "Fashion",
+    "brand": "PeakTech",
+    "in_stock": true,
+    "rating": 4.2,
+    "id": 114
+  },
+  {
+    "name": "PhotoMaster Prime Lens 85mm",
+    "price": 549.0,
+    "category": "Photography",
+    "brand": "OptixLab",
+    "in_stock": true,
+    "rating": 4.6,
+    "id": 115
+  },
+  {
+    "name": "Quantum Noise Cancelling Buds",
+    "price": 179.0,
+    "category": "Audio",
+    "brand": "SonicBeam",
+    "in_stock": true,
+    "rating": 4.3,
+    "id": 116
+  }
+]

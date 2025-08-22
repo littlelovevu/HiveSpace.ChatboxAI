@@ -1,0 +1,10 @@
+name,price,category,brand,in_stock,rating
+SmartHome Hub Pro,199,Home & Garden,Acme,true,4.6
+Ergo Chair Plus,399,Furniture,FlexiSeat,yes,4.7
+Cyclone Vacuum S12,259,Home & Garden,AirNova,1,4.5
+Aurora 27 5K Monitor,699,Computers,Northstar,true,4.8
+Nimbus Wireless Router AX9000,329,Electronics,StormNet,true,4.4
+Trailblazer Smartwatch X,289,Fashion,PeakTech,true,4.2
+PhotoMaster Prime Lens 85mm,549,Photography,OptixLab,true,4.6
+Quantum Noise Cancelling Buds,179,Audio,SonicBeam,true,4.3
+
