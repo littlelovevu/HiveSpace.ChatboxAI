@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HiveSpace - AI Chat Assistant</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <div class="chat-container">
+        <!-- Left Sidebar - Chat Sessions -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="brand">
+                    <i class="fas fa-hive"></i>
+                    <h2>HiveSpace</h2>
+                </div>
+                <button class="new-chat-btn" onclick="startNewChat()">
+                    <i class="fas fa-plus"></i>
+                    New Chat
+                </button>
+            </div>
+
+            <div class="chat-sessions">
+                <div class="session-item active" onclick="switchSession(0)">
+                    <i class="fas fa-comments"></i>
+                    <span>General Support</span>
+                    <small>2 min ago</small>
+                </div>
+                <div class="session-item" onclick="switchSession(1)">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span>Order Inquiry</span>
+                    <small>1 hour ago</small>
+                </div>
+                <div class="session-item" onclick="switchSession(2)">
+                    <i class="fas fa-box"></i>
+                    <span>Product Info</span>
+                    <small>3 hours ago</small>
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="avatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="user-details">
+                        <span class="username">John Doe</span>
+                        <span class="status">Online</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side - Chat Area -->
+        <div class="chat-area">
+            <div class="chat-header">
+                <div class="chat-title">
+                    <h3>General Support</h3>
+                    <span class="status-indicator">AI Assistant</span>
+                </div>
+                <div class="chat-actions">
+                    <button class="action-btn" title="Clear Chat">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <button class="action-btn" title="Export Chat">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="message ai-message">
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            Hello! Welcome to HiveSpace. I'm your AI assistant, ready to help you with any questions
+                            about our products, orders, or general support. How can I assist you today?
+                        </div>
+                        <div class="message-time">Just now</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <div class="input-container">
+                    <textarea id="messageInput" placeholder="Type your message here..." rows="1"
+                        onkeydown="handleKeyPress(event)"></textarea>
+                    <button class="send-btn" onclick="sendMessage()">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="input-footer">
+                    <small>HiveSpace AI • Powered by advanced language models</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
