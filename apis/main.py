@@ -104,6 +104,72 @@ def update_session_activity(session_id: str):
             session["last_activity"] = "Just now"
             break
 
+# Image utilities
+def is_image_request(text: str) -> bool:
+    """Nhận diện yêu cầu tạo hình ảnh từ người dùng"""
+    if not text:
+        return False
+    keywords = [
+        "tạo hình", "tạo ảnh", "vẽ ảnh", "vẽ hình", "generate image", "create an image",
+        "image of", "hình minh họa", "poster", "logo", "bìa", "banner"
+    ]
+    t = text.lower()
+    return any(k in t for k in keywords)
+
+def is_invoice_image_request(text: str) -> bool:
+    """Nhận diện yêu cầu tạo hình ảnh hóa đơn cụ thể"""
+    if not text:
+        return False
+    t = text.lower()
+    
+    # Từ khóa liên quan đến hóa đơn/đơn hàng
+    invoice_keywords = [
+        "hóa đơn", "hoá đơn", "bill", "invoice", "receipt", "đơn hàng", "order",
+        "biên lai", "phiếu thu", "chứng từ"
+    ]
+    
+    # Từ khóa tạo ảnh
+    image_keywords = [
+        "tạo hình", "tạo ảnh", "vẽ ảnh", "vẽ hình", "generate image", "create an image",
+        "hình minh họa", "minh họa"
+    ]
+    
+    # Phải có cả hai loại từ khóa
+    has_invoice = any(k in t for k in invoice_keywords)
+    has_image = any(k in t for k in image_keywords)
+    
+    return has_invoice and has_image
+
+def build_invoice_image_markdown(prompt: str, width: int = 400, height: int = 600) -> str:
+    """Tạo markdown hiển thị 1 ảnh hóa đơn với thông tin đơn hàng từ database."""
+    import urllib.parse
+    # Chuẩn hoá prompt: hóa đơn, thông tin đơn hàng, kích thước nhỏ gọn
+    style_suffix = (
+        " | invoice receipt layout, order information, customer details, product list,"
+        " total amount, payment method, shipping address, minimalist design,"
+        " plain white background, no decorative elements, business document style"
+    )
+    final_prompt = f"{prompt}{style_suffix}"
+    encoded = urllib.parse.quote_plus(final_prompt)
+    seed = "hivespace-invoice"
+    url = f"https://image.pollinations.ai/prompt/{encoded}?seed={seed}&width={width}&height={height}"
+    md = f"![Hóa đơn đơn hàng]({url})"
+    caption = f"\n\n> Hóa đơn đơn hàng theo yêu cầu: \"{prompt}\" (kích thước: {width}x{height})"
+    return md + caption
+
+def build_general_image_markdown(prompt: str, width: int = 512, height: int = 512) -> str:
+    """Tạo markdown hiển thị 1 ảnh tổng quát theo yêu cầu của người dùng."""
+    import urllib.parse
+    # Giữ nguyên prompt của người dùng, chỉ thêm chất lượng cao
+    style_suffix = " | high quality, detailed, clear"
+    final_prompt = f"{prompt}{style_suffix}"
+    encoded = urllib.parse.quote_plus(final_prompt)
+    seed = "hivespace-general"
+    url = f"https://image.pollinations.ai/prompt/{encoded}?seed={seed}&width={width}&height={height}"
+    md = f"![{prompt}]({url})"
+    caption = f"\n\n> Hình ảnh theo yêu cầu: \"{prompt}\" (kích thước: {width}x{height})"
+    return md + caption
+
 def generate_ai_response(user_message: str) -> str:
     """Tạo phản hồi AI sử dụng HiveSpace Agent"""
     try:
@@ -207,43 +273,53 @@ async def send_message(request: NewMessageRequest):
     
     session["messages"].append(user_message)
     
-    # Tạo phản hồi AI với lịch sử hội thoại
-    try:
-        agent = create_agent()
-        # Lấy tối đa 20 tin nhắn gần nhất để làm ngữ cảnh
-        recent_messages = session["messages"][-20:] if len(session["messages"]) > 0 else []
-        # Chuyển đổi định dạng tin nhắn sang format mà agent mong đợi
-        history = []
-        # Thêm system prompt
-        history.append({
-            "role": "system",
-            "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
+    # Phân loại yêu cầu tạo ảnh: hóa đơn hoặc tổng quát
+    if is_invoice_image_request(request.message):
+        prompt = request.message
+        ai_response = build_invoice_image_markdown(prompt)
+    elif is_image_request(request.message):
+        prompt = request.message
+        ai_response = build_general_image_markdown(prompt)
+    else:
+        try:
+            agent = create_agent()
+            # Lấy tối đa 20 tin nhắn gần nhất để làm ngữ cảnh
+            recent_messages = session["messages"][-20:] if len(session["messages"]) > 0 else []
+            # Chuyển đổi định dạng tin nhắn sang format mà agent mong đợi
+            history = []
+            # Thêm system prompt
+            history.append({
+                "role": "system",
+                                        "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
 
 Bạn có khả năng:
 1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất
 2. Tìm kiếm thông tin sản phẩm trong cơ sở dữ liệu nội bộ
 3. Tìm kiếm thông tin đơn hàng và trạng thái giao hàng
+4. Tạo hình ảnh theo yêu cầu (hóa đơn hoặc tổng quát)
 
 Khi người dùng hỏi về sản phẩm, hãy sử dụng product_search tool để tìm thông tin chi tiết.
 Khi cần thông tin mới nhất, hãy sử dụng web_search tool để tìm kiếm trên internet.
-Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng."""
-        })
-        history.append({
-            "role": "system",
-            "content": f"Thông tin bổ sung:\n- Thời gian hiện tại: {datetime.now().strftime('%m-%Y')}"
-        })
+Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng.
+Khi người dùng yêu cầu tạo hình ảnh hóa đơn/đơn hàng, tôi sẽ tạo hóa đơn với kích thước 400x600.
+Khi người dùng yêu cầu tạo hình ảnh khác, tôi sẽ tạo hình ảnh tổng quát với kích thước 512x512."""
+            })
+            history.append({
+                "role": "system",
+                "content": f"Thông tin bổ sung:\n- Thời gian hiện tại: {datetime.now().strftime('%m-%Y')}"
+            })
 
-        # Đưa lịch sử cũ vào
-        for m in recent_messages:
-            role = "assistant" if m["type"] == "ai" else "user"
-            history.append({"role": role, "content": m["text"]})
+            # Đưa lịch sử cũ vào
+            for m in recent_messages:
+                role = "assistant" if m["type"] == "ai" else "user"
+                history.append({"role": role, "content": m["text"]})
 
-        # Thêm câu hỏi hiện tại
-        history.append({"role": "user", "content": request.message})
+            # Thêm câu hỏi hiện tại
+            history.append({"role": "user", "content": request.message})
 
-        ai_response = agent.ask_react_agent(history)
-    except Exception as e:
-        ai_response = f"Xin lỗi, tôi gặp sự cố khi xử lý câu hỏi của bạn. Vui lòng thử lại sau. (Lỗi: {str(e)})"
+            ai_response = agent.ask_react_agent(history)
+        except Exception as e:
+            ai_response = f"Xin lỗi, tôi gặp sự cố khi xử lý câu hỏi của bạn. Vui lòng thử lại sau. (Lỗi: {str(e)})"
     ai_message = {
         "id": f"msg_{str(uuid.uuid4())[:8]}",
         "type": "ai",
@@ -296,21 +372,52 @@ async def send_message_stream(request: NewMessageRequest):
             # Tạo agent instance
             agent = create_agent()
             
+            # Phân loại yêu cầu tạo ảnh: hóa đơn hoặc tổng quát -> stream markdown ngay
+            if is_invoice_image_request(request.message):
+                md = build_invoice_image_markdown(request.message)
+                yield f"data: {json.dumps({'type': 'chunk', 'content': md})}\n\n"
+                ai_message = {
+                    "id": f"msg_{str(uuid.uuid4())[:8]}",
+                    "type": "ai",
+                    "text": md,
+                    "timestamp": get_current_timestamp(),
+                    "sender_name": "HiveSpace AI"
+                }
+                session["messages"].append(ai_message)
+                yield f"data: {json.dumps({'type': 'complete', 'ai_message': ai_message})}\n\n"
+                return
+            elif is_image_request(request.message):
+                md = build_general_image_markdown(request.message)
+                yield f"data: {json.dumps({'type': 'chunk', 'content': md})}\n\n"
+                ai_message = {
+                    "id": f"msg_{str(uuid.uuid4())[:8]}",
+                    "type": "ai",
+                    "text": md,
+                    "timestamp": get_current_timestamp(),
+                    "sender_name": "HiveSpace AI"
+                }
+                session["messages"].append(ai_message)
+                yield f"data: {json.dumps({'type': 'complete', 'ai_message': ai_message})}\n\n"
+                return
+
             # Chuẩn bị lịch sử hội thoại (tối đa 20 tin nhắn gần nhất)
             recent_messages = session["messages"][-20:] if len(session["messages"]) > 0 else []
             history = [
                 {
                     "role": "system",
-                    "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
+                                            "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
 
 Bạn có khả năng:
 1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất
 2. Tìm kiếm thông tin sản phẩm trong cơ sở dữ liệu nội bộ
 3. Tìm kiếm thông tin đơn hàng và trạng thái giao hàng
+4. Tạo hình ảnh theo yêu cầu (hóa đơn hoặc tổng quát)
 
 Khi người dùng hỏi về sản phẩm, hãy sử dụng product_search tool để tìm thông tin chi tiết.
 Khi cần thông tin mới nhất, hãy sử dụng web_search tool để tìm kiếm trên internet.
-Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng."""
+Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng.
+Khi người dùng yêu cầu tạo hình ảnh hóa đơn/đơn hàng, tôi sẽ tạo hóa đơn với kích thước 400x600.
+Khi người dùng yêu cầu tạo hình ảnh khác, tôi sẽ tạo hình ảnh tổng quát với kích thước 512x512."""
                 },
                 {
                     "role": "system",
