@@ -4,6 +4,14 @@ let currentSessionId = null;
 let chatSessions = [];
 let isLoading = false;
 
+// Khởi tạo markdown-it
+const md = window.markdownit({
+    html: true,
+    linkify: true,
+    typographer: true,
+    breaks: true
+});
+
 // API Base URL
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -112,8 +120,19 @@ async function createNewChatSession(title) {
 async function sendMessageToAPI(message) {
     if (!currentSessionId) return;
 
+    // Hiển thị message của user ngay lập tức
+    addMessageToChat('user', message, formatTime(new Date()));
+
+    // Tạo message AI placeholder
+    const aiMessageId = `ai-msg-${Date.now()}`;
+    addMessageToChat('ai', '', formatTime(new Date()), aiMessageId);
+
+    // Scroll xuống cuối
+    scrollToBottom();
+
     try {
-        const response = await fetch(`${API_BASE_URL}/api/messages/send`, {
+        // Sử dụng streaming endpoint
+        const response = await fetch(`${API_BASE_URL}/api/messages/send/stream`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -128,23 +147,55 @@ async function sendMessageToAPI(message) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        const result = await response.json();
+        // Xử lý streaming response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let aiResponseText = '';
 
-        if (result.success) {
-            // Cập nhật UI với tin nhắn mới
-            addMessageToChat('user', message, formatTime(new Date()));
-            addMessageToChat('ai', result.ai_response.text, formatTime(new Date()));
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-            // Cập nhật danh sách sessions
-            await loadChatSessions();
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
 
-            // Scroll xuống cuối
-            scrollToBottom();
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const data = JSON.parse(line.slice(6));
+
+                            if (data.type === 'chunk') {
+                                // Cập nhật từng phần của AI response
+                                aiResponseText += data.content;
+                                updateAIMessage(aiMessageId, aiResponseText);
+                                scrollToBottom();
+                            } else if (data.type === 'complete') {
+                                // Hoàn thành
+                                console.log('Streaming completed');
+                            } else if (data.type === 'error') {
+                                // Xử lý lỗi
+                                updateAIMessage(aiMessageId, data.content);
+                                showErrorMessage('AI response error');
+                            }
+                        } catch (e) {
+                            console.error('Error parsing streaming data:', e);
+                        }
+                    }
+                }
+            }
+        } finally {
+            reader.releaseLock();
         }
+
+        // Cập nhật danh sách sessions
+        await loadChatSessions();
 
     } catch (error) {
         console.error('Error sending message:', error);
         showErrorMessage('Failed to send message');
+        // Xóa message AI nếu có lỗi
+        removeAIMessage(aiMessageId);
     }
 }
 
@@ -254,7 +305,7 @@ function renderChatMessages(messages) {
     });
 }
 
-function addMessageToChat(type, text, time) {
+function addMessageToChat(type, text, time, messageId = null) {
     const chatMessages = document.getElementById('chatMessages');
 
     // Xóa welcome message nếu có
@@ -266,6 +317,10 @@ function addMessageToChat(type, text, time) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}-message`;
 
+    if (messageId) {
+        messageDiv.id = messageId;
+    }
+
     const avatarIcon = type === 'ai' ? 'fas fa-robot' : 'fas fa-user';
 
     messageDiv.innerHTML = `
@@ -273,12 +328,14 @@ function addMessageToChat(type, text, time) {
             <i class="${avatarIcon}"></i>
         </div>
         <div class="message-content">
-            <div class="message-text">${text}</div>
+            <div class="message-text">${type === 'ai' ? md.render(text) : text}</div>
             <div class="message-time">${time}</div>
         </div>
     `;
 
     chatMessages.appendChild(messageDiv);
+
+    return messageDiv;
 }
 
 function updateChatHeader(title) {
@@ -414,6 +471,24 @@ function autoResizeTextarea() {
 function scrollToBottom() {
     const chatMessages = document.getElementById('chatMessages');
     chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Functions for streaming AI responses
+function updateAIMessage(messageId, text) {
+    const messageDiv = document.getElementById(messageId);
+    if (messageDiv) {
+        const messageText = messageDiv.querySelector('.message-text');
+        if (messageText) {
+            messageText.innerHTML = md.render(text);
+        }
+    }
+}
+
+function removeAIMessage(messageId) {
+    const messageDiv = document.getElementById(messageId);
+    if (messageDiv) {
+        messageDiv.remove();
+    }
 }
 
 // Loading and Error States

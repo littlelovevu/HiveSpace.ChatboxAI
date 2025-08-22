@@ -8,7 +8,9 @@ from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-from tools.web_search import web_search
+from .tools.web_search import web_search
+from .tools.product_tool import product_search
+from .tools.order_tool import order_search
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
@@ -61,7 +63,7 @@ class HiveSpaceAgent:
         )
         
         # Bind tools to the model
-        self.react_agent = self.llm.bind_tools([web_search])
+        self.react_agent = self.llm.bind_tools([web_search, product_search, order_search])
         
         # Khởi tạo workflow graph
         self._setup_workflow()
@@ -72,7 +74,7 @@ class HiveSpaceAgent:
         graph_builder = StateGraph(State)
         
         # Định nghĩa tools
-        tools = [web_search]
+        tools = [web_search, product_search, order_search]
         tools_by_name = {tool.name: tool for tool in tools}
         
         # Định nghĩa tool node
@@ -152,7 +154,6 @@ class HiveSpaceAgent:
         Returns:
             str: Phản hồi từ AI agent
         """
-        print("Human: " + messages[-1]["content"])
         
         response_content = ""
         for event in self.react_agent_graph.stream({"messages": messages}):
@@ -160,7 +161,6 @@ class HiveSpaceAgent:
                 if key != "llm" or value["messages"][-1].content == "":
                     continue
                 response_content = value["messages"][-1].content
-                print("AI:", response_content)
         
         return response_content
     
@@ -176,7 +176,16 @@ class HiveSpaceAgent:
             str: Phản hồi từ AI agent
         """
         if system_prompt is None:
-            system_prompt = "Bạn là AVA, trợ lý số của công ty cổ phần MISA."
+            system_prompt = """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
+
+Bạn có khả năng:
+1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất
+2. Tìm kiếm thông tin sản phẩm trong cơ sở dữ liệu nội bộ
+3. Tìm kiếm thông tin đơn hàng và trạng thái giao hàng
+
+Khi người dùng hỏi về sản phẩm, hãy sử dụng product_search tool để tìm thông tin chi tiết.
+Khi cần thông tin mới nhất, hãy sử dụng web_search tool để tìm kiếm trên internet.
+Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng."""
         
         messages = [
             {
@@ -248,8 +257,6 @@ if __name__ == "__main__":
     
     # Hỏi câu hỏi với web search
     response = agent.ask_simple_question("MISA cam kết 2500 tỷ làm gì?")
-    print(f"\nKết quả: {response}")
     
     # Hỏi câu hỏi đơn giản
     simple_response = agent.get_basic_response("Xin chào, bạn là ai?")
-    print(f"\nPhản hồi đơn giản: {simple_response}")

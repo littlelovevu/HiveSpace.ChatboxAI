@@ -18,5 +18,4 @@ def web_search(input: str):
     results = DDGS().text(input, max_results=5, region="vn-vi")
     return results
 
-print(web_search("MISA cam kết 2500 tỷ làm gì?")) # Kiểm tra thử
 

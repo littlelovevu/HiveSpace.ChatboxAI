@@ -5,11 +5,13 @@ API backend cho hệ thống chatbox HiveSpace với quản lý phiên chat và 
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 import uuid
 import json
+from agents.agent import create_agent
 
 # Khởi tạo FastAPI app
 app = FastAPI(
@@ -274,41 +276,20 @@ def update_session_activity(session_id: str):
             break
 
 def generate_ai_response(user_message: str) -> str:
-    """Tạo phản hồi AI giả lập dựa trên tin nhắn của user"""
-    user_message_lower = user_message.lower()
+    """Tạo phản hồi AI sử dụng HiveSpace Agent"""
+    try:
+        # Tạo agent instance
+        agent = create_agent()
+        
+        # Gọi agent để xử lý câu hỏi
+        response = agent.ask_simple_question(user_message)
+        
+        return response
     
-    # Keyword-based responses
-    if any(word in user_message_lower for word in ["order", "purchase", "buy"]):
-        return "I can help you with your order! Please provide your order number or email address so I can look up the details for you."
-    
-    elif any(word in user_message_lower for word in ["product", "item", "goods"]):
-        return "I'd be happy to tell you more about our products! Which specific product are you interested in learning about?"
-    
-    elif any(word in user_message_lower for word in ["price", "cost", "how much"]):
-        return "I can help you with pricing information! Could you specify which product or service you're asking about?"
-    
-    elif any(word in user_message_lower for word in ["shipping", "delivery", "when arrive"]):
-        return "Great question about shipping! Our standard delivery takes 3-5 business days. Would you like to know about expedited options?"
-    
-    elif any(word in user_message_lower for word in ["return", "refund", "exchange"]):
-        return "I understand you're asking about returns. We have a 30-day return policy for most items. What specific item are you looking to return?"
-    
-    elif any(word in user_message_lower for word in ["hello", "hi", "hey"]):
-        return "Hello! Welcome to HiveSpace. How can I assist you today?"
-    
-    elif any(word in user_message_lower for word in ["thank", "thanks"]):
-        return "You're welcome! Is there anything else I can help you with?"
-    
-    else:
-        responses = [
-            "Thank you for your message! I understand you're asking about that. Let me help you with more details.",
-            "That's a great question! Based on what you've shared, I can provide you with the following information.",
-            "I appreciate you reaching out about this. Here's what I can tell you based on your inquiry.",
-            "Thanks for asking! This is something I can definitely help you with. Let me break it down for you.",
-            "Excellent question! I have some helpful information that should address your concerns."
-        ]
-        import random
-        return random.choice(responses)
+    except Exception as e:
+        print(f"Error calling AI agent: {str(e)}")
+        # Fallback response nếu có lỗi
+        return f"Xin lỗi, tôi gặp sự cố khi xử lý câu hỏi của bạn. Vui lòng thử lại sau. (Lỗi: {str(e)})"
 
 # API Endpoints
 
@@ -418,6 +399,101 @@ async def send_message(request: NewMessageRequest):
         "ai_response": ai_message,
         "session_updated": True
     }
+
+@app.post("/api/messages/send/stream")
+async def send_message_stream(request: NewMessageRequest):
+    """Gửi tin nhắn mới và nhận phản hồi AI streaming"""
+    # Tìm phiên chat
+    session = None
+    for s in chat_sessions:
+        if s["id"] == request.session_id:
+            session = s
+            break
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Phiên chat không tồn tại")
+    
+    # Thêm tin nhắn của user
+    user_message = {
+        "id": f"msg_{str(uuid.uuid4())[:8]}",
+        "type": "user",
+        "text": request.message,
+        "timestamp": get_current_timestamp(),
+        "sender_name": "User"
+    }
+    
+    session["messages"].append(user_message)
+    
+    # Cập nhật thời gian hoạt động
+    update_session_activity(request.session_id)
+    
+    async def generate_stream():
+        try:
+            # Tạo agent instance
+            agent = create_agent()
+            
+            # Gọi agent để xử lý câu hỏi với streaming
+            response_content = ""
+            for event in agent.react_agent_graph.stream({
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
+
+Bạn có khả năng:
+1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất
+2. Tìm kiếm thông tin sản phẩm trong cơ sở dữ liệu nội bộ
+3. Tìm kiếm thông tin đơn hàng và trạng thái giao hàng
+
+Khi người dùng hỏi về sản phẩm, hãy sử dụng product_search tool để tìm thông tin chi tiết.
+Khi cần thông tin mới nhất, hãy sử dụng web_search tool để tìm kiếm trên internet.
+Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng."""
+                    },
+                    {
+                        "role": "user",
+                        "content": request.message
+                    }
+                ]
+            }):
+                for key, value in event.items():
+                    if key != "llm" or value["messages"][-1].content == "":
+                        continue
+                    
+                    current_content = value["messages"][-1].content
+                    if current_content != response_content:
+                        # Gửi phần mới
+                        new_part = current_content[len(response_content):]
+                        if new_part:
+                            yield f"data: {json.dumps({'type': 'chunk', 'content': new_part})}\n\n"
+                        response_content = current_content
+            
+            # Lưu tin nhắn AI hoàn chỉnh
+            ai_message = {
+                "id": f"msg_{str(uuid.uuid4())[:8]}",
+                "type": "ai",
+                "text": response_content,
+                "timestamp": get_current_timestamp(),
+                "sender_name": "HiveSpace AI"
+            }
+            
+            session["messages"].append(ai_message)
+            
+            # Gửi signal hoàn thành
+            yield f"data: {json.dumps({'type': 'complete', 'ai_message': ai_message})}\n\n"
+            
+        except Exception as e:
+            error_msg = f"Xin lỗi, tôi gặp sự cố khi xử lý câu hỏi của bạn. Vui lòng thử lại sau. (Lỗi: {str(e)})"
+            yield f"data: {json.dumps({'type': 'error', 'content': error_msg})}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "text/event-stream"
+        }
+    )
 
 @app.delete("/api/sessions/{session_id}/clear")
 async def clear_chat_session(session_id: str):

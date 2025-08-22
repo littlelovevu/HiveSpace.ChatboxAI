@@ -594,3 +594,125 @@ body {
 .chat-sessions::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8;
 }
+
+/* Markdown styling */
+.message-text h1,
+.message-text h2,
+.message-text h3,
+.message-text h4,
+.message-text h5,
+.message-text h6 {
+    margin: 16px 0 8px 0;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.message-text h1 {
+    font-size: 1.5em;
+}
+.message-text h2 {
+    font-size: 1.3em;
+}
+.message-text h3 {
+    font-size: 1.1em;
+}
+
+.message-text p {
+    margin: 8px 0;
+}
+
+.message-text ul,
+.message-text ol {
+    margin: 8px 0;
+    padding-left: 20px;
+}
+
+.message-text li {
+    margin: 4px 0;
+}
+
+.message-text code {
+    background-color: #f4f4f4;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "Courier New", monospace;
+    font-size: 0.9em;
+    color: #e74c3c;
+}
+
+.message-text pre {
+    background-color: #f8f8f8;
+    padding: 12px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 12px 0;
+    border: 1px solid #e0e0e0;
+}
+
+.message-text pre code {
+    background: none;
+    padding: 0;
+    color: #2c3e50;
+}
+
+.message-text blockquote {
+    border-left: 4px solid #ff8c42;
+    margin: 12px 0;
+    padding-left: 16px;
+    color: #666;
+    font-style: italic;
+}
+
+.message-text a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.message-text a:hover {
+    text-decoration: underline;
+}
+
+.message-text table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+}
+
+.message-text th,
+.message-text td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: left;
+}
+
+.message-text th {
+    background-color: #f8f8f8;
+    font-weight: 600;
+}
+
+.message-text img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    margin: 8px 0;
+}
+
+/* AI message specific markdown styling */
+.ai-message .message-text h1,
+.ai-message .message-text h2,
+.ai-message .message-text h3,
+.ai-message .message-text h4,
+.ai-message .message-text h5,
+.ai-message .message-text h6 {
+    color: #2c3e50;
+}
+
+.ai-message .message-text code {
+    background-color: #f4f4f4;
+    color: #e74c3c;
+}
+
+.ai-message .message-text pre {
+    background-color: #f8f8f8;
+    border: 1px solid #e0e0e0;
+}
