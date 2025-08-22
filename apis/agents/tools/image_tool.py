@@ -1,13 +1,19 @@
 """
 Image generation tools for HiveSpace Agent.
-- Provide invoice image markdown and general image markdown
-- Expose a single tool `generate_image` that routes based on image_type
+- Build invoice HTML from real order data (order_tool)
+- Convert that HTML to an image (PNG) and return markdown
+- Provide general image markdown utility
 """
 
 from typing import Optional
 from pydantic import BaseModel, Field
 from langchain_core.tools import tool
 import urllib.parse
+import os
+import re
+from datetime import datetime
+from PIL import Image, ImageDraw, ImageFont
+from .order_tool import order_search
 
 
 def build_invoice_image_markdown(prompt: str, width: int = 400, height: int = 600) -> str:
@@ -48,21 +54,244 @@ class GenerateImageInput(BaseModel):
     height: Optional[int] = Field(default=None, description="Chiều cao ảnh")
 
 
+def _select_order_by_prompt(prompt: str):
+    """Chọn đơn hàng phù hợp dựa trên prompt (mã đơn, tên, trạng thái)."""
+    p = prompt.lower()
+    query = "gần đây"
+    
+    # Tìm mã đơn dạng ORD-YYYY-NNN - PRIORITY 1
+    match = re.search(r"ORD-\d{4}-\d{3}", prompt)
+    if match:
+        query = match.group(0)
+        # Search for exact match first
+        data = order_search(query)
+        orders = data.get("orders") if isinstance(data, dict) else None
+        if orders:
+            # Find exact match
+            for order in orders:
+                if order["order_id"].lower() == query.lower():
+                    return order
+            # If no exact match, return first match
+            return orders[0]
+    
+    # Tìm theo họ tên phổ biến - PRIORITY 2
+    for name in ["nguyễn", "trần", "lê", "phạm", "hoàng", "vũ", "đặng", "bùi", "ngô", "lý"]:
+        if name in p:
+            query = name
+            break
+    
+    # Tìm theo trạng thái - PRIORITY 3
+    for st in ["đã giao", "đang xử lý", "đang giao", "chờ xác nhận", "đã hủy"]:
+        if st in p:
+            query = st
+            break
+
+    data = order_search(query)
+    orders = data.get("orders") if isinstance(data, dict) else None
+    if orders:
+        return orders[0]
+    
+    # fallback: lấy tất cả
+    data_all = order_search("")
+    orders_all = data_all.get("orders") if isinstance(data_all, dict) else None
+    return orders_all[0] if orders_all else None
+
+
+def build_invoice_html(prompt: str) -> tuple[str, str]:
+    """Tạo HTML hóa đơn từ dữ liệu thật trong order_tool.
+
+    Returns: (order_id, html_str)
+    """
+    order = _select_order_by_prompt(prompt)
+    if not order:
+        # Trả về HTML tối giản nếu không có dữ liệu
+        fallback_id = f"ORD-{datetime.now().strftime('%Y%m%d')}-000"
+        html = f"""
+<div class=\"invoice-container\">
+  <div class=\"invoice-header\"><h2>HÓA ĐƠN</h2><p>Mã: {fallback_id}</p></div>
+  <div class=\"customer-section\">Không có dữ liệu đơn hàng phù hợp.</div>
+</div>
+"""
+        return fallback_id, html
+
+    order_id = order["order_id"]
+    customer_name = order["customer_name"]
+    customer_email = order["customer_email"]
+    customer_phone = order["customer_phone"]
+    customer_address = order["shipping_address"]
+    items = order["items"]
+    subtotal = order["total_amount"]
+    tax = int(subtotal * 0.1)
+    shipping = 50000
+    total = subtotal + tax + shipping
+
+    # CSS tối giản để chụp ảnh đẹp nền trắng
+    html = f"""
+<!DOCTYPE html>
+<html><head><meta charset=\"utf-8\" />
+<style>
+body {{ font-family: Arial, sans-serif; background:#fff; margin:0; padding:24px; }}
+.invoice-container {{ max-width:820px; margin:0 auto; border:1px solid #e7e7e7; border-radius:12px; padding:24px; }}
+.invoice-header {{ display:flex; justify-content:space-between; border-bottom:2px solid #ff8c42; padding-bottom:12px; margin-bottom:16px; }}
+.invoice-header h1 {{ color:#ff8c42; margin:0; font-size:24px; }}
+.invoice-header h2 {{ margin:0; color:#2c3e50; }}
+.customer-section, .products-section, .totals-section {{ margin-top:14px; }}
+.customer-section h3, .products-section h3 {{ margin:0 0 8px; color:#2c3e50; }}
+table {{ width:100%; border-collapse:collapse; }}
+th, td {{ text-align:left; padding:8px; border-bottom:1px solid #ececec; font-size:14px; }}
+.totals {{ width:100%; margin-top:10px; }}
+.totals div {{ display:flex; justify-content:space-between; padding:6px 0; }}
+.final {{ font-weight:700; border-top:2px solid #ff8c42; margin-top:6px; padding-top:10px; }}
+</style></head>
+<body>
+  <div class=\"invoice-container\">
+    <div class=\"invoice-header\">
+      <div><h1>HIVESPACE COMPANY</h1><div>info@hivespace.com</div></div>
+      <div><h2>HÓA ĐƠN</h2><div>Mã: {order_id}</div><div>Ngày: {datetime.now().strftime('%d/%m/%Y')}</div></div>
+    </div>
+    <div class=\"customer-section\">
+      <h3>Khách hàng</h3>
+      <div>Tên: {customer_name}</div>
+      <div>Email: {customer_email}</div>
+      <div>Điện thoại: {customer_phone}</div>
+      <div>Địa chỉ: {customer_address}</div>
+    </div>
+    <div class=\"products-section\">
+      <h3>Sản phẩm</h3>
+      <table>
+        <thead><tr><th>Sản phẩm</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th></tr></thead>
+        <tbody>
+"""
+    for it in items:
+        line_total = it["price"] * it["quantity"]
+        html += f"<tr><td>{it['name']}</td><td>{it['quantity']}</td><td>{it['price']:,} VNĐ</td><td>{line_total:,} VNĐ</td></tr>"
+    html += f"""
+        </tbody>
+      </table>
+    </div>
+    <div class=\"totals-section\">
+      <div class=\"totals\">
+        <div><span>Tạm tính</span><span>{subtotal:,} VNĐ</span></div>
+        <div><span>Thuế (10%)</span><span>{tax:,} VNĐ</span></div>
+        <div><span>Vận chuyển</span><span>{shipping:,} VNĐ</span></div>
+        <div class=\"final\"><span>TỔNG</span><span>{total:,} VNĐ</span></div>
+      </div>
+    </div>
+  </div>
+</body></html>
+"""
+    return order_id, html
+
+
+def invoice_html_to_image(order_id: str, html: str, width: int = 820, height: int = 1100) -> str:
+    """Convert invoice HTML to PNG using PIL and return markdown string to display it."""
+    try:
+        # Get the absolute path to the apis directory
+        current_dir = os.path.dirname(os.path.abspath(__file__))  # tools directory
+        apis_dir = os.path.dirname(os.path.dirname(current_dir))  # apis directory
+        output_dir = os.path.join(apis_dir, "invoice_images")
+        
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+        
+        image_filename = f"invoice_{order_id}.png"
+        image_path = os.path.join(output_dir, image_filename)
+        
+        # Create a simple invoice image using PIL instead of HTML conversion
+        # This is a fallback since html2image requires browser drivers
+        img = Image.new('RGB', (width, height), color='white')
+        draw = ImageDraw.Draw(img)
+        
+        # Try to use a default font, fallback to basic if not available
+        try:
+            # Try to use a larger font for headers
+            font_large = ImageFont.truetype("arial.ttf", 24)
+            font_medium = ImageFont.truetype("arial.ttf", 18)
+            font_small = ImageFont.load_default()
+        except:
+            # Fallback to default font
+            font_large = ImageFont.load_default()
+            font_medium = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+        
+        # Draw invoice content
+        y_position = 50
+        
+        # Header
+        draw.text((50, y_position), f"HÓA ĐƠN - {order_id}", fill='black', font=font_large)
+        y_position += 40
+        
+        # Date
+        draw.text((50, y_position), f"Ngày: {datetime.now().strftime('%d/%m/%Y')}", fill='black', font=font_medium)
+        y_position += 30
+        
+        # Company info
+        draw.text((50, y_position), "HIVESPACE COMPANY", fill='black', font=font_medium)
+        y_position += 25
+        draw.text((50, y_position), "info@hivespace.com", fill='black', font=font_small)
+        y_position += 40
+        
+        # Get order data for the image - FIX: use the exact order_id
+        order = _select_order_by_prompt(order_id)  # Use the full order_id, not just the last part
+        if order:
+            # Customer info
+            draw.text((50, y_position), f"Khách hàng: {order['customer_name']}", fill='black', font=font_medium)
+            y_position += 25
+            draw.text((50, y_position), f"Email: {order['customer_email']}", fill='black', font=font_small)
+            y_position += 25
+            draw.text((50, y_position), f"Điện thoại: {order['customer_phone']}", fill='black', font=font_small)
+            y_position += 40
+            
+            # Products
+            draw.text((50, y_position), "Sản phẩm:", fill='black', font=font_medium)
+            y_position += 25
+            
+            for item in order['items'][:5]:  # Limit to 5 items to fit
+                item_text = f"• {item['name']} x{item['quantity']} - {item['price']:,} VNĐ"
+                draw.text((70, y_position), item_text, fill='black', font=font_small)
+                y_position += 20
+            
+            y_position += 20
+            
+            # Totals
+            subtotal = order['total_amount']
+            tax = int(subtotal * 0.1)
+            shipping = 50000
+            total = subtotal + tax + shipping
+            
+            draw.text((50, y_position), f"Tạm tính: {subtotal:,} VNĐ", fill='black', font=font_medium)
+            y_position += 25
+            draw.text((50, y_position), f"Thuế (10%): {tax:,} VNĐ", fill='black', font=font_medium)
+            y_position += 25
+            draw.text((50, y_position), f"Vận chuyển: {shipping:,} VNĐ", fill='black', font=font_medium)
+            y_position += 25
+            draw.text((50, y_position), f"TỔNG: {total:,} VNĐ", fill='black', font=font_large)
+        
+        # Save the image
+        img.save(image_path, 'PNG')
+        
+        # Return markdown with relative path for display
+        relative_path = f"../apis/invoice_images/{image_filename}"
+        md = f"![Hóa đơn {order_id}]({relative_path})"
+        return md
+        
+    except Exception as e:
+        return f"Lỗi khi tạo ảnh hóa đơn: {str(e)}"
+
+
 @tool("generate_image", args_schema=GenerateImageInput, return_direct=True)
 def generate_image(prompt: str, image_type: str, width: Optional[int] = None, height: Optional[int] = None) -> str:
-    """Generate image markdown (invoice or general).
-
-    - invoice: plain invoice style image focused on textual details
-    - general: high quality generic image rendering
-    """
+    """Generate image markdown (invoice via HTML→IMG, or general)."""
     kind = (image_type or "general").lower().strip()
     if kind == "invoice":
-        w = width if width else 400
-        h = height if height else 600
-        return build_invoice_image_markdown(prompt, w, h)
+        order_id, html = build_invoice_html(prompt)
+        w = width if width else 820
+        h = height if height else 1100
+        return invoice_html_to_image(order_id, html, w, h)
     else:
         w = width if width else 512
         h = height if height else 512
         return build_general_image_markdown(prompt, w, h)
+
 
 

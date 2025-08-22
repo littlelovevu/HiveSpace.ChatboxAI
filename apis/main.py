@@ -12,7 +12,7 @@ from datetime import datetime
 import uuid
 import json
 from agents.agent import create_agent
-from agents.tools.image_tool import build_invoice_image_markdown, build_general_image_markdown
+from agents.tools.image_tool import build_general_image_markdown, build_invoice_html, invoice_html_to_image
 
 # Khởi tạo FastAPI app
 app = FastAPI(
@@ -251,7 +251,8 @@ async def send_message(request: NewMessageRequest):
     # Phân loại yêu cầu tạo ảnh: hóa đơn hoặc tổng quát
     if is_invoice_image_request(request.message):
         prompt = request.message
-        ai_response = build_invoice_image_markdown(prompt)
+        order_id, html = build_invoice_html(prompt)
+        ai_response = invoice_html_to_image(order_id, html)
     elif is_image_request(request.message):
         prompt = request.message
         ai_response = build_general_image_markdown(prompt)
@@ -349,7 +350,8 @@ async def send_message_stream(request: NewMessageRequest):
             
             # Phân loại yêu cầu tạo ảnh: hóa đơn hoặc tổng quát -> stream markdown ngay
             if is_invoice_image_request(request.message):
-                md = build_invoice_image_markdown(request.message)
+                order_id, html = build_invoice_html(request.message)
+                md = invoice_html_to_image(order_id, html)
                 yield f"data: {json.dumps({'type': 'chunk', 'content': md})}\n\n"
                 ai_message = {
                     "id": f"msg_{str(uuid.uuid4())[:8]}",
