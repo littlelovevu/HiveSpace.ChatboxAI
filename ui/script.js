@@ -75,7 +75,7 @@ async function loadChatSessionDetail(sessionId) {
         updateChatHeader(session.title);
         enableChatInput();
 
-        // Tự động scroll xuống dưới cùng khi load session
+        // Tự động scroll xuống dưới khi load session
         scrollToBottom();
 
     } catch (error) {
@@ -352,6 +352,32 @@ function addMessageToChat(type, text, time, messageId = null) {
     return messageDiv;
 }
 
+function addUserMessage(text, type = 'text') {
+    const messageId = 'user-' + Date.now();
+    const messageDiv = addMessageToChat('user', text, formatTime(new Date()), messageId);
+
+    // Add file indicator if it's a file message
+    if (type === 'file') {
+        const messageText = messageDiv.querySelector('.message-text');
+        messageText.innerHTML = `<i class="fas fa-paperclip"></i> ${text}`;
+    }
+
+    return messageId;
+}
+
+function addAIMessage(text, isLoading = false) {
+    const messageId = 'ai-' + Date.now();
+    const messageDiv = addMessageToChat('ai', text, formatTime(new Date()), messageId);
+
+    if (isLoading) {
+        messageDiv.classList.add('loading');
+        const messageText = messageDiv.querySelector('.message-text');
+        messageText.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+    }
+
+    return messageId;
+}
+
 function updateChatHeader(title) {
     document.getElementById('chatTitle').textContent = title;
 }
@@ -415,19 +441,7 @@ function createNewChat() {
     createNewChatSession(title);
 }
 
-function sendMessage() {
-    const messageInput = document.getElementById('messageInput');
-    const message = messageInput.value.trim();
 
-    if (!message || !currentSessionId) return;
-
-    // Clear input
-    messageInput.value = '';
-    messageInput.style.height = 'auto';
-
-    // Send message via API
-    sendMessageToAPI(message);
-}
 
 function clearCurrentChat() {
     if (!currentSessionId) {
@@ -504,6 +518,94 @@ function updateAIMessage(messageId, text) {
                 });
             }, 100);
         }
+    }
+}
+
+// File handling functions
+let selectedFile = null;
+
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (file) {
+        selectedFile = file;
+        showFilePreview(file);
+    }
+}
+
+function showFilePreview(file) {
+    const filePreview = document.getElementById('filePreview');
+    const fileName = document.getElementById('fileName');
+
+    fileName.textContent = file.name;
+    filePreview.style.display = 'block';
+
+    // Auto-hide preview after 5 seconds
+    setTimeout(() => {
+        if (filePreview.style.display !== 'none') {
+            filePreview.style.display = 'none';
+        }
+    }, 5000);
+}
+
+function removeSelectedFile() {
+    selectedFile = null;
+    document.getElementById('fileInput').value = '';
+    document.getElementById('filePreview').style.display = 'none';
+}
+
+function sendMessage() {
+    const messageInput = document.getElementById('messageInput');
+    const message = messageInput.value.trim();
+
+    if (!message && !selectedFile) return;
+    if (!currentSessionId) return;
+
+    // Clear input
+    messageInput.value = '';
+    messageInput.style.height = 'auto';
+
+    // Send message with file if attached
+    if (selectedFile) {
+        sendMessageWithFile(message, selectedFile);
+        removeSelectedFile();
+    } else {
+        sendMessageToAPI(message);
+    }
+}
+
+async function sendMessageWithFile(message, file) {
+    try {
+        const formData = new FormData();
+        formData.append('message', message || '');
+        formData.append('file', file);
+        formData.append('session_id', currentSessionId);
+
+        // Show user message with file
+        const messageId = addUserMessage(message || `Sent file: ${file.name}`, 'file');
+
+        // Show loading state
+        const loadingId = addAIMessage('Processing your file...', true);
+
+        const response = await fetch(`${API_BASE_URL}/api/messages/with-file`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        // Update AI message with response
+        updateAIMessage(loadingId, result.response || 'File processed successfully!');
+
+        // Reload chat session to get updated messages
+        await loadChatSessionDetail(currentSessionId);
+
+    } catch (error) {
+        console.error('Error sending message with file:', error);
+        showErrorMessage('Failed to send file');
     }
 }
 
@@ -586,28 +688,4 @@ function handleImageClick(event) {
     openImageZoomModal(img.src, img.alt);
 }
 
-// Override the existing renderChatMessages function to add image listeners
-function renderChatMessages(messages) {
-    const chatMessages = document.getElementById('chatMessages');
-    chatMessages.innerHTML = '';
 
-    if (!messages || messages.length === 0) {
-        chatMessages.innerHTML = `
-            <div class="welcome-message">
-                <div class="welcome-icon">
-                    <i class="fas fa-hive"></i>
-                </div>
-                <h3>Welcome to HiveSpace</h3>
-                <p>Start a conversation to begin chatting with our AI assistant.</p>
-            </div>
-        `;
-        return;
-    }
-
-    messages.forEach(message => {
-        addMessageToChat(message.type, message.text, message.timestamp, message.id);
-    });
-
-    // Add click listeners to images after rendering
-    setTimeout(addImageClickListeners, 100);
-}

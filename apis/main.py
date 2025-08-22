@@ -3,7 +3,7 @@ HiveSpace Chatbox API
 API backend cho hệ thống chatbox HiveSpace với quản lý phiên chat và lịch sử tin nhắn
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -450,6 +450,132 @@ Khi người dùng yêu cầu tạo hình ảnh khác, tôi sẽ tạo hình ả
             "Content-Type": "text/event-stream"
         }
     )
+
+@app.post("/api/messages/with-file")
+async def send_message_with_file(
+    session_id: str = Form(...),
+    message: str = Form(""),
+    file: UploadFile = File(...)
+):
+    """Gửi tin nhắn mới kèm file và nhận phản hồi AI"""
+    # Tìm phiên chat
+    session = None
+    for s in chat_sessions:
+        if s["id"] == session_id:
+            session = s
+            break
+    
+    if not session:
+        raise HTTPException(status_code=404, detail="Phiên chat không tồn tại")
+    
+    # Kiểm tra file
+    if not file:
+        raise HTTPException(status_code=400, detail="Không có file được gửi")
+    
+    # Kiểm tra loại file được hỗ trợ
+    allowed_types = [
+        "image/jpeg", "image/png", "image/gif", "image/webp",
+        "application/pdf", "application/msword", 
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain"
+    ]
+    
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Loại file {file.content_type} không được hỗ trợ. Chỉ chấp nhận: ảnh, PDF, Word, text"
+        )
+    
+    # Thêm tin nhắn của user với file
+    user_message_text = message if message else f"Đã gửi file: {file.filename}"
+    user_message = {
+        "id": f"msg_{str(uuid.uuid4())[:8]}",
+        "type": "user",
+        "text": user_message_text,
+        "timestamp": get_current_timestamp(),
+        "sender_name": "User"
+    }
+    
+    session["messages"].append(user_message)
+    
+    # Xử lý file và tạo phản hồi AI
+    try:
+        # Đọc nội dung file
+        file_content = await file.read()
+        
+        # Tạo phản hồi AI dựa trên loại file
+        if file.content_type.startswith("image/"):
+            # Xử lý file ảnh
+            ai_response = f"Tôi đã nhận được file ảnh: **{file.filename}**\n\n"
+            ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
+            ai_response += f"- **Loại ảnh**: {file.content_type}\n"
+            ai_response += f"- **Tên file**: {file.filename}\n\n"
+            ai_response += "Bạn có muốn tôi phân tích nội dung ảnh này không? Hoặc bạn có câu hỏi gì khác về file này?"
+            
+        elif file.content_type == "application/pdf":
+            # Xử lý file PDF
+            ai_response = f"Tôi đã nhận được file PDF: **{file.filename}**\n\n"
+            ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
+            ai_response += f"- **Tên file**: {file.filename}\n\n"
+            ai_response += "Bạn có muốn tôi trích xuất thông tin từ PDF này không? Hoặc bạn có câu hỏi gì khác về file này?"
+            
+        elif file.content_type in ["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
+            # Xử lý file Word
+            ai_response = f"Tôi đã nhận được file Word: **{file.filename}**\n\n"
+            ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
+            ai_response += f"- **Tên file**: {file.filename}\n\n"
+            ai_response += "Bạn có muốn tôi trích xuất nội dung từ file Word này không? Hoặc bạn có câu hỏi gì khác về file này?"
+            
+        elif file.content_type == "text/plain":
+            # Xử lý file text
+            try:
+                text_content = file_content.decode('utf-8')
+                ai_response = f"Tôi đã nhận được file text: **{file.filename}**\n\n"
+                ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
+                ai_response += f"- **Tên file**: {file.filename}\n\n"
+                ai_response += "**Nội dung file:**\n```\n{text_content[:500]}{'...' if len(text_content) > 500 else ''}\n```\n\n"
+                ai_response += "Bạn có câu hỏi gì về nội dung file này không?"
+            except UnicodeDecodeError:
+                ai_response = f"Tôi đã nhận được file text: **{file.filename}** nhưng không thể đọc được nội dung do vấn đề encoding.\n\n"
+                ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
+                ai_response += f"- **Tên file**: {file.filename}\n\n"
+                ai_response += "Bạn có thể gửi lại file với encoding UTF-8 hoặc có câu hỏi gì khác không?"
+        
+        else:
+            ai_response = f"Tôi đã nhận được file: **{file.filename}**\n\n"
+            ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
+            ai_response += f"- **Loại file**: {file.content_type}\n"
+            ai_response += f"- **Tên file**: {file.filename}\n\n"
+            ai_response += "Bạn có câu hỏi gì về file này không?"
+        
+    except Exception as e:
+        ai_response = f"Xin lỗi, tôi gặp sự cố khi xử lý file **{file.filename}**. Vui lòng thử lại sau. (Lỗi: {str(e)})"
+    
+    # Tạo tin nhắn AI
+    ai_message = {
+        "id": f"msg_{str(uuid.uuid4())[:8]}",
+        "type": "ai",
+        "text": ai_response,
+        "timestamp": get_current_timestamp(),
+        "sender_name": "HiveSpace AI"
+    }
+    
+    session["messages"].append(ai_message)
+    
+    # Cập nhật thời gian hoạt động
+    update_session_activity(session_id)
+    
+    return {
+        "success": True,
+        "user_message": user_message,
+        "ai_response": ai_message,
+        "file_info": {
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "size": len(file_content) if 'file_content' in locals() else 0
+        },
+        "session_updated": True
+    }
 
 @app.delete("/api/sessions/{session_id}/clear")
 async def clear_chat_session(session_id: str):

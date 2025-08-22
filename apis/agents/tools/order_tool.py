@@ -176,13 +176,31 @@ def order_search(input: str):
     input_lower = input.lower()
     matched_orders = []
     
+    # Kiểm tra xem có phải tìm kiếm mã đơn hàng cụ thể không
+    is_order_id_search = input_lower.startswith("ord-") and len(input_lower) >= 8
+    
     for order in orders:
-        # Tìm kiếm theo mã đơn hàng, tên khách hàng, email, trạng thái
-        if (input_lower in order["order_id"].lower() or 
-            input_lower in order["customer_name"].lower() or 
-            input_lower in order["customer_email"].lower() or 
-            input_lower in order["status"].lower()):
-            matched_orders.append(order)
+        # Nếu tìm kiếm mã đơn hàng cụ thể, ưu tiên tìm kiếm chính xác
+        if is_order_id_search:
+            if input_lower == order["order_id"].lower():
+                # Tìm thấy chính xác, trả về ngay
+                return {
+                    "message": f"Tìm thấy đơn hàng chính xác: {order['order_id']}",
+                    "orders": [order],
+                    "total": 1,
+                    "search_query": input,
+                    "exact_match": True
+                }
+            elif input_lower in order["order_id"].lower():
+                # Tìm thấy một phần, thêm vào danh sách
+                matched_orders.append(order)
+        else:
+            # Tìm kiếm theo mã đơn hàng, tên khách hàng, email, trạng thái
+            if (input_lower in order["order_id"].lower() or 
+                input_lower in order["customer_name"].lower() or 
+                input_lower in order["customer_email"].lower() or 
+                input_lower in order["status"].lower()):
+                matched_orders.append(order)
     
     # Nếu không tìm thấy, trả về tất cả đơn hàng
     if not matched_orders:

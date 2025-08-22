@@ -65,14 +65,27 @@ def _select_order_by_prompt(prompt: str):
         query = match.group(0)
         # Search for exact match first
         data = order_search(query)
-        orders = data.get("orders") if isinstance(data, dict) else None
-        if orders:
-            # Find exact match
-            for order in orders:
-                if order["order_id"].lower() == query.lower():
-                    return order
-            # If no exact match, return first match
-            return orders[0]
+        
+        # Kiểm tra cấu trúc dữ liệu trả về
+        if isinstance(data, dict):
+            orders = data.get("orders", [])
+            if orders:
+                # Find exact match
+                for order in orders:
+                    if order["order_id"].lower() == query.lower():
+                        return order
+                # If no exact match, return first match
+                return orders[0]
+        elif isinstance(data, list):
+            # Nếu data trả về trực tiếp là list orders
+            orders = data
+            if orders:
+                # Find exact match
+                for order in orders:
+                    if order["order_id"].lower() == query.lower():
+                        return order
+                # If no exact match, return first match
+                return orders[0]
     
     # Tìm theo họ tên phổ biến - PRIORITY 2
     for name in ["nguyễn", "trần", "lê", "phạm", "hoàng", "vũ", "đặng", "bùi", "ngô", "lý"]:
@@ -87,14 +100,29 @@ def _select_order_by_prompt(prompt: str):
             break
 
     data = order_search(query)
-    orders = data.get("orders") if isinstance(data, dict) else None
-    if orders:
-        return orders[0]
+    
+    # Kiểm tra cấu trúc dữ liệu trả về
+    if isinstance(data, dict):
+        orders = data.get("orders", [])
+        if orders:
+            return orders[0]
+    elif isinstance(data, list):
+        # Nếu data trả về trực tiếp là list orders
+        if data:
+            return data[0]
     
     # fallback: lấy tất cả
     data_all = order_search("")
-    orders_all = data_all.get("orders") if isinstance(data_all, dict) else None
-    return orders_all[0] if orders_all else None
+    
+    # Kiểm tra cấu trúc dữ liệu trả về
+    if isinstance(data_all, dict):
+        orders_all = data_all.get("orders", [])
+        return orders_all[0] if orders_all else None
+    elif isinstance(data_all, list):
+        # Nếu data trả về trực tiếp là list orders
+        return data_all[0] if data_all else None
+    
+    return None
 
 
 def build_invoice_html(prompt: str) -> tuple[str, str]:
