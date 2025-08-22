@@ -177,7 +177,7 @@ class HiveSpaceAgent:
             str: Phản hồi từ AI agent
         """
         if system_prompt is None:
-            system_prompt = """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
+            system_prompt = """Bạn là Hiper, trợ lý số của tập đoàn HiveSpace. 
 
 Bạn có khả năng:
 1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất

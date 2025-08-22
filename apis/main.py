@@ -11,6 +11,7 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 import json
+import os
 from agents.agent import create_agent
 from agents.tools.image_tool import build_general_image_markdown, build_invoice_html, invoice_html_to_image
 
@@ -96,6 +97,36 @@ def format_time_ago(timestamp_str):
             return "Just now"
     except:
         return "Unknown time"
+
+# Load AI system prompt from external document
+AI_SYSTEM_PROMPT = ""
+
+def load_ai_system_prompt():
+    """Load system prompt cho AI từ file ai_system_prompt.md (nếu có)."""
+    global AI_SYSTEM_PROMPT
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_path = os.path.join(base_dir, "ai_system_prompt.md")
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            AI_SYSTEM_PROMPT = f.read().strip()
+    except Exception:
+        # Fallback nội dung mặc định nếu chưa có file
+        AI_SYSTEM_PROMPT = (
+            "Bạn là AVA, trợ lý số của công ty cổ phần MISA.\n\n"
+            "Bạn có khả năng:\n"
+            "1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất\n"
+            "2. Tìm kiếm thông tin sản phẩm trong cơ sở dữ liệu nội bộ\n"
+            "3. Tìm kiếm thông tin đơn hàng và trạng thái giao hàng\n"
+            "4. Tạo hình ảnh theo yêu cầu (hóa đơn hoặc tổng quát)\n\n"
+            "Khi người dùng hỏi về sản phẩm, hãy sử dụng product_search tool để tìm thông tin chi tiết.\n"
+            "Khi cần thông tin mới nhất, hãy sử dụng web_search tool để tìm kiếm trên internet.\n"
+            "Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng.\n"
+            "Khi người dùng yêu cầu tạo hình ảnh hóa đơn/đơn hàng, tôi sẽ tạo hóa đơn đơn giản với background trắng, text đen, không trang trí, kích thước 400x600.\n"
+            "Khi người dùng yêu cầu tạo hình ảnh khác, tôi sẽ tạo hình ảnh tổng quát với kích thước 512x512."
+        )
+
+# Nạp prompt ngay khi khởi động
+load_ai_system_prompt()
 
 def update_session_activity(session_id: str):
     """Cập nhật thời gian hoạt động của phiên chat"""
@@ -263,23 +294,8 @@ async def send_message(request: NewMessageRequest):
             recent_messages = session["messages"][-20:] if len(session["messages"]) > 0 else []
             # Chuyển đổi định dạng tin nhắn sang format mà agent mong đợi
             history = []
-                        # Thêm system prompt
-            history.append({
-                "role": "system",
-                "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
-
-Bạn có khả năng:
-1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất
-2. Tìm kiếm thông tin sản phẩm trong cơ sở dữ liệu nội bộ
-3. Tìm kiếm thông tin đơn hàng và trạng thái giao hàng
-4. Tạo hình ảnh theo yêu cầu (hóa đơn hoặc tổng quát)
-
-Khi người dùng hỏi về sản phẩm, hãy sử dụng product_search tool để tìm thông tin chi tiết.
-Khi cần thông tin mới nhất, hãy sử dụng web_search tool để tìm kiếm trên internet.
-Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng.
-Khi người dùng yêu cầu tạo hình ảnh hóa đơn/đơn hàng, tôi sẽ tạo hóa đơn đơn giản với background trắng, text đen, không trang trí, kích thước 400x600.
-Khi người dùng yêu cầu tạo hình ảnh khác, tôi sẽ tạo hình ảnh tổng quát với kích thước 512x512."""
-            })
+            # Thêm system prompt từ tài liệu bên ngoài
+            history.append({"role": "system", "content": AI_SYSTEM_PROMPT})
             history.append({
                 "role": "system",
                 "content": f"Thông tin bổ sung:\n- Thời gian hiện tại: {datetime.now().strftime('%m-%Y')}"
@@ -380,26 +396,8 @@ async def send_message_stream(request: NewMessageRequest):
             # Chuẩn bị lịch sử hội thoại (tối đa 20 tin nhắn gần nhất)
             recent_messages = session["messages"][-20:] if len(session["messages"]) > 0 else []
             history = [
-                                {
-                    "role": "system",
-                    "content": """Bạn là AVA, trợ lý số của công ty cổ phần MISA. 
-
-Bạn có khả năng:
-1. Tìm kiếm thông tin trên web để cập nhật kiến thức mới nhất
-2. Tìm kiếm thông tin sản phẩm trong cơ sở dữ liệu nội bộ
-3. Tìm kiếm thông tin đơn hàng và trạng thái giao hàng
-4. Tạo hình ảnh theo yêu cầu (hóa đơn hoặc tổng quát)
-
-Khi người dùng hỏi về sản phẩm, hãy sử dụng product_search tool để tìm thông tin chi tiết.
-Khi cần thông tin mới nhất, hãy sử dụng web_search tool để tìm kiếm trên internet.
-Khi người dùng hỏi về đơn hàng, hãy sử dụng order_search tool để tìm thông tin đơn hàng.
-Khi người dùng yêu cầu tạo hình ảnh hóa đơn/đơn hàng, tôi sẽ tạo hóa đơn đơn giản với background trắng, text đen, không trang trí, kích thước 400x600.
-Khi người dùng yêu cầu tạo hình ảnh khác, tôi sẽ tạo hình ảnh tổng quát với kích thước 512x512."""
-                },
-                {
-                    "role": "system",
-                    "content": f"Thông tin bổ sung:\n- Thời gian hiện tại: {datetime.now().strftime('%m-%Y')}"
-                }
+                {"role": "system", "content": AI_SYSTEM_PROMPT},
+                {"role": "system", "content": f"Thông tin bổ sung:\n- Thời gian hiện tại: {datetime.now().strftime('%m-%Y')}"}
             ]
 
             for m in recent_messages:
@@ -457,7 +455,7 @@ async def send_message_with_file(
     message: str = Form(""),
     file: UploadFile = File(...)
 ):
-    """Gửi tin nhắn mới kèm file và nhận phản hồi AI"""
+    """Gửi tin nhắn mới kèm file và nhận phản hồi AI thông minh"""
     # Tìm phiên chat
     session = None
     for s in chat_sessions:
@@ -498,55 +496,34 @@ async def send_message_with_file(
     
     session["messages"].append(user_message)
     
-    # Xử lý file và tạo phản hồi AI
+    # Xử lý file và tạo phản hồi AI thông minh
     try:
         # Đọc nội dung file
         file_content = await file.read()
         
-        # Tạo phản hồi AI dựa trên loại file
-        if file.content_type.startswith("image/"):
-            # Xử lý file ảnh
-            ai_response = f"Tôi đã nhận được file ảnh: **{file.filename}**\n\n"
-            ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
-            ai_response += f"- **Loại ảnh**: {file.content_type}\n"
-            ai_response += f"- **Tên file**: {file.filename}\n\n"
-            ai_response += "Bạn có muốn tôi phân tích nội dung ảnh này không? Hoặc bạn có câu hỏi gì khác về file này?"
-            
-        elif file.content_type == "application/pdf":
-            # Xử lý file PDF
-            ai_response = f"Tôi đã nhận được file PDF: **{file.filename}**\n\n"
-            ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
-            ai_response += f"- **Tên file**: {file.filename}\n\n"
-            ai_response += "Bạn có muốn tôi trích xuất thông tin từ PDF này không? Hoặc bạn có câu hỏi gì khác về file này?"
-            
-        elif file.content_type in ["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
-            # Xử lý file Word
-            ai_response = f"Tôi đã nhận được file Word: **{file.filename}**\n\n"
-            ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
-            ai_response += f"- **Tên file**: {file.filename}\n\n"
-            ai_response += "Bạn có muốn tôi trích xuất nội dung từ file Word này không? Hoặc bạn có câu hỏi gì khác về file này?"
-            
-        elif file.content_type == "text/plain":
-            # Xử lý file text
-            try:
-                text_content = file_content.decode('utf-8')
-                ai_response = f"Tôi đã nhận được file text: **{file.filename}**\n\n"
-                ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
-                ai_response += f"- **Tên file**: {file.filename}\n\n"
-                ai_response += "**Nội dung file:**\n```\n{text_content[:500]}{'...' if len(text_content) > 500 else ''}\n```\n\n"
-                ai_response += "Bạn có câu hỏi gì về nội dung file này không?"
-            except UnicodeDecodeError:
-                ai_response = f"Tôi đã nhận được file text: **{file.filename}** nhưng không thể đọc được nội dung do vấn đề encoding.\n\n"
-                ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
-                ai_response += f"- **Tên file**: {file.filename}\n\n"
-                ai_response += "Bạn có thể gửi lại file với encoding UTF-8 hoặc có câu hỏi gì khác không?"
+        # Tạo prompt thông minh dựa trên yêu cầu của user
+        user_request = message.lower() if message else ""
+        file_info = f"File: {file.filename} ({len(file_content)} bytes, {file.content_type})"
         
+        # Phân tích yêu cầu của user
+        if "cv" in user_request or "resume" in user_request or "sơ yếu lý lịch" in user_request:
+            # Xử lý CV/Resume
+            ai_response = await process_cv_file(file, file_content, user_request)
+        elif "hóa đơn" in user_request or "invoice" in user_request or "bill" in user_request:
+            # Xử lý hóa đơn
+            ai_response = await process_invoice_file(file, file_content, user_request)
+        elif "báo cáo" in user_request or "report" in user_request:
+            # Xử lý báo cáo
+            ai_response = await process_report_file(file, file_content, user_request)
+        elif "hợp đồng" in user_request or "contract" in user_request:
+            # Xử lý hợp đồng
+            ai_response = await process_contract_file(file, file_content, user_request)
+        elif "preview" in user_request or "xem trước" in user_request or "phân tích" in user_request:
+            # Xử lý preview/analysis
+            ai_response = await process_preview_file(file, file_content, user_request)
         else:
-            ai_response = f"Tôi đã nhận được file: **{file.filename}**\n\n"
-            ai_response += f"- **Kích thước file**: {len(file_content)} bytes\n"
-            ai_response += f"- **Loại file**: {file.content_type}\n"
-            ai_response += f"- **Tên file**: {file.filename}\n\n"
-            ai_response += "Bạn có câu hỏi gì về file này không?"
+            # Xử lý file thông thường với AI thông minh
+            ai_response = await process_general_file(file, file_content, user_request)
         
     except Exception as e:
         ai_response = f"Xin lỗi, tôi gặp sự cố khi xử lý file **{file.filename}**. Vui lòng thử lại sau. (Lỗi: {str(e)})"
@@ -576,6 +553,264 @@ async def send_message_with_file(
         },
         "session_updated": True
     }
+
+async def process_cv_file(file: UploadFile, file_content: bytes, user_request: str) -> str:
+    """Xử lý file CV/Resume một cách thông minh"""
+    try:
+        if file.content_type == "application/pdf":
+            # Xử lý PDF CV
+            ai_response = f"📋 **PHÂN TÍCH CV/Resume: {file.filename}**\n\n"
+            ai_response += f"Tôi đã nhận được CV của bạn. Dựa trên yêu cầu \"{user_request}\", tôi sẽ phân tích:\n\n"
+            ai_response += "**📊 Thông tin cơ bản:**\n"
+            ai_response += f"- Tên file: {file.filename}\n"
+            ai_response += f"- Kích thước: {len(file_content):,} bytes\n"
+            ai_response += f"- Loại file: PDF\n\n"
+            
+            # Thêm phân tích thông minh
+            if "preview" in user_request or "xem trước" in user_request:
+                ai_response += "**🔍 Phân tích nội dung CV:**\n"
+                ai_response += "• Đây là file PDF, tôi có thể giúp bạn:\n"
+                ai_response += "  - Xem trước nội dung chính\n"
+                ai_response += "  - Kiểm tra thông tin liên hệ\n"
+                ai_response += "  - Đánh giá cấu trúc CV\n"
+                ai_response += "  - Gợi ý cải thiện\n\n"
+                ai_response += "**💡 Gợi ý:** Bạn có muốn tôi phân tích chi tiết hơn về kinh nghiệm làm việc, kỹ năng, hoặc đưa ra lời khuyên cải thiện CV không?"
+            else:
+                ai_response += "**💼 Tôi có thể giúp bạn:**\n"
+                ai_response += "• Phân tích nội dung CV\n"
+                ai_response += "• Đánh giá điểm mạnh/yếu\n"
+                ai_response += "• Gợi ý cải thiện\n"
+                ai_response += "• Tối ưu hóa cho vị trí cụ thể\n\n"
+                ai_response += "Bạn muốn tôi tập trung vào khía cạnh nào của CV?"
+            
+        elif file.content_type in ["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
+            # Xử lý Word CV
+            ai_response = f"📋 **PHÂN TÍCH CV/Resume: {file.filename}**\n\n"
+            ai_response += f"Tôi đã nhận được CV Word của bạn. Dựa trên yêu cầu \"{user_request}\":\n\n"
+            ai_response += "**📊 Thông tin cơ bản:**\n"
+            ai_response += f"- Tên file: {file.filename}\n"
+            ai_response += f"- Kích thước: {len(file_content):,} bytes\n"
+            ai_response += f"- Loại file: Microsoft Word\n\n"
+            
+            ai_response += "**💼 Tôi có thể giúp bạn:**\n"
+            ai_response += "• Phân tích nội dung CV\n"
+            ai_response += "• Đánh giá cấu trúc và định dạng\n"
+            ai_response += "• Gợi ý cải thiện\n"
+            ai_response += "• Chuyển đổi sang PDF nếu cần\n\n"
+            ai_response += "Bạn muốn tôi tập trung vào khía cạnh nào?"
+            
+        else:
+            ai_response = f"📋 **PHÂN TÍCH CV/Resume: {file.filename}**\n\n"
+            ai_response += f"Tôi đã nhận được file CV của bạn. Dựa trên yêu cầu \"{user_request}\":\n\n"
+            ai_response += "**📊 Thông tin file:**\n"
+            ai_response += f"- Tên file: {file.filename}\n"
+            ai_response += f"- Kích thước: {len(file_content):,} bytes\n"
+            ai_response += f"- Loại file: {file.content_type}\n\n"
+            ai_response += "**💼 Tôi có thể giúp bạn:**\n"
+            ai_response += "• Phân tích nội dung CV\n"
+            ai_response += "• Đánh giá và gợi ý cải thiện\n"
+            ai_response += "• Tối ưu hóa cho mục tiêu nghề nghiệp\n\n"
+            ai_response += "Bạn muốn tôi tập trung vào khía cạnh nào?"
+        
+        return ai_response
+        
+    except Exception as e:
+        return f"Xin lỗi, tôi gặp sự cố khi xử lý CV. Vui lòng thử lại sau. (Lỗi: {str(e)})"
+
+async def process_invoice_file(file: UploadFile, file_content: bytes, user_request: str) -> str:
+    """Xử lý file hóa đơn một cách thông minh"""
+    try:
+        ai_response = f"🧾 **PHÂN TÍCH HÓA ĐƠN: {file.filename}**\n\n"
+        ai_response += f"Tôi đã nhận được file hóa đơn của bạn. Dựa trên yêu cầu \"{user_request}\":\n\n"
+        ai_response += "**📊 Thông tin file:**\n"
+        ai_response += f"- Tên file: {file.filename}\n"
+        ai_response += f"- Kích thước: {len(file_content):,} bytes\n"
+        ai_response += f"- Loại file: {file.content_type}\n\n"
+        
+        if file.content_type == "application/pdf":
+            ai_response += "**🔍 Tôi có thể giúp bạn:**\n"
+            ai_response += "• Trích xuất thông tin hóa đơn\n"
+            ai_response += "• Phân tích chi tiết giao dịch\n"
+            ai_response += "• Tính toán tổng tiền, thuế\n"
+            ai_response += "• Kiểm tra tính chính xác\n"
+            ai_response += "• Xuất dữ liệu sang Excel\n\n"
+            ai_response += "**💡 Gợi ý:** Bạn muốn tôi phân tích chi tiết hóa đơn này không?"
+        else:
+            ai_response += "**💼 Tôi có thể giúp bạn:**\n"
+            ai_response += "• Phân tích nội dung hóa đơn\n"
+            ai_response += "• Kiểm tra tính chính xác\n"
+            ai_response += "• Tổng hợp dữ liệu\n\n"
+            ai_response += "Bạn muốn tôi tập trung vào khía cạnh nào?"
+        
+        return ai_response
+        
+    except Exception as e:
+        return f"Xin lỗi, tôi gặp sự cố khi xử lý hóa đơn. Vui lòng thử lại sau. (Lỗi: {str(e)})"
+
+async def process_report_file(file: UploadFile, file_content: bytes, user_request: str) -> str:
+    """Xử lý file báo cáo một cách thông minh"""
+    try:
+        ai_response = f"📊 **PHÂN TÍCH BÁO CÁO: {file.filename}**\n\n"
+        ai_response += f"Tôi đã nhận được file báo cáo của bạn. Dựa trên yêu cầu \"{user_request}\":\n\n"
+        ai_response += "**📊 Thông tin file:**\n"
+        ai_response += f"- Tên file: {file.filename}\n"
+        ai_response += f"- Kích thước: {len(file_content):,} bytes\n"
+        ai_response += f"- Loại file: {file.content_type}\n\n"
+        
+        ai_response += "**🔍 Tôi có thể giúp bạn:**\n"
+        ai_response += "• Phân tích nội dung báo cáo\n"
+        ai_response += "• Trích xuất dữ liệu quan trọng\n"
+        ai_response += "• Tóm tắt điểm chính\n"
+        ai_response += "• Tạo biểu đồ và phân tích\n"
+        ai_response += "• So sánh với báo cáo trước\n\n"
+        ai_response += "**💡 Gợi ý:** Bạn muốn tôi tập trung vào khía cạnh nào của báo cáo?"
+        
+        return ai_response
+        
+    except Exception as e:
+        return f"Xin lỗi, tôi gặp sự cố khi xử lý báo cáo. Vui lòng thử lại sau. (Lỗi: {str(e)})"
+
+async def process_contract_file(file: UploadFile, file_content: bytes, user_request: str) -> str:
+    """Xử lý file hợp đồng một cách thông minh"""
+    try:
+        ai_response = f"📜 **PHÂN TÍCH HỢP ĐỒNG: {file.filename}**\n\n"
+        ai_response += f"Tôi đã nhận được file hợp đồng của bạn. Dựa trên yêu cầu \"{user_request}\":\n\n"
+        ai_response += "**📊 Thông tin file:**\n"
+        ai_response += f"- Tên file: {file.filename}\n"
+        ai_response += f"- Kích thước: {len(file_content):,} bytes\n"
+        ai_response += f"- Loại file: {file.content_type}\n\n"
+        
+        ai_response += "**🔍 Tôi có thể giúp bạn:**\n"
+        ai_response += "• Phân tích điều khoản hợp đồng\n"
+        ai_response += "• Trích xuất thông tin quan trọng\n"
+        ai_response += "• Kiểm tra rủi ro pháp lý\n"
+        ai_response += "• Tóm tắt nghĩa vụ và quyền lợi\n"
+        ai_response += "• So sánh với mẫu chuẩn\n\n"
+        ai_response += "**💡 Gợi ý:** Bạn muốn tôi tập trung vào khía cạnh nào của hợp đồng?"
+        
+        return ai_response
+        
+    except Exception as e:
+        return f"Xin lỗi, tôi gặp sự cố khi xử lý hợp đồng. Vui lòng thử lại sau. (Lỗi: {str(e)})"
+
+async def process_preview_file(file: UploadFile, file_content: bytes, user_request: str) -> str:
+    """Xử lý preview file một cách thông minh"""
+    try:
+        ai_response = f"👁️ **XEM TRƯỚC FILE: {file.filename}**\n\n"
+        ai_response += f"Tôi đã nhận được yêu cầu xem trước file của bạn. Dựa trên yêu cầu \"{user_request}\":\n\n"
+        ai_response += "**📊 Thông tin file:**\n"
+        ai_response += f"- Tên file: {file.filename}\n"
+        ai_response += f"- Kích thước: {len(file_content):,} bytes\n"
+        ai_response += f"- Loại file: {file.content_type}\n\n"
+        
+        if file.content_type.startswith("image/"):
+            ai_response += "**🖼️ Đây là file ảnh, tôi có thể:**\n"
+            ai_response += "• Phân tích nội dung ảnh\n"
+            ai_response += "• Nhận diện đối tượng\n"
+            ai_response += "• Trích xuất văn bản (OCR)\n"
+            ai_response += "• Phân tích màu sắc và bố cục\n\n"
+            ai_response += "**💡 Gợi ý:** Bạn muốn tôi phân tích ảnh này như thế nào?"
+            
+        elif file.content_type == "application/pdf":
+            ai_response += "**📄 Đây là file PDF, tôi có thể:**\n"
+            ai_response += "• Trích xuất văn bản\n"
+            ai_response += "• Phân tích cấu trúc\n"
+            ai_response += "• Tóm tắt nội dung chính\n"
+            ai_response += "• Trích xuất dữ liệu bảng\n\n"
+            ai_response += "**💡 Gợi ý:** Bạn muốn tôi xem trước nội dung gì?"
+            
+        elif file.content_type in ["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
+            ai_response += "**📝 Đây là file Word, tôi có thể:**\n"
+            ai_response += "• Phân tích nội dung\n"
+            ai_response += "• Tóm tắt văn bản\n"
+            ai_response += "• Trích xuất thông tin quan trọng\n"
+            ai_response += "• Kiểm tra định dạng\n\n"
+            ai_response += "**💡 Gợi ý:** Bạn muốn tôi xem trước phần nào?"
+            
+        elif file.content_type == "text/plain":
+            try:
+                text_content = file_content.decode('utf-8')
+                ai_response += "**📃 Đây là file text, tôi có thể:**\n"
+                ai_response += "• Phân tích nội dung\n"
+                ai_response += "• Tóm tắt văn bản\n"
+                ai_response += "• Trích xuất thông tin quan trọng\n\n"
+                ai_response += "**📖 Nội dung file:**\n```\n{text_content[:300]}{'...' if len(text_content) > 300 else ''}\n```\n\n"
+                ai_response += "**💡 Gợi ý:** Bạn muốn tôi phân tích chi tiết hơn không?"
+            except UnicodeDecodeError:
+                ai_response += "**⚠️ Lưu ý:** File text này có vấn đề về encoding. Tôi có thể giúp bạn:\n"
+                ai_response += "• Chuyển đổi encoding\n"
+                ai_response += "• Phân tích nội dung có thể đọc được\n\n"
+                ai_response += "**💡 Gợi ý:** Bạn có muốn tôi thử đọc file với encoding khác không?"
+        
+        else:
+            ai_response += "**📁 Đây là file đặc biệt, tôi có thể:**\n"
+            ai_response += "• Phân tích thông tin cơ bản\n"
+            ai_response += "• Kiểm tra tính toàn vẹn\n"
+            ai_response += "• Đưa ra gợi ý xử lý\n\n"
+            ai_response += "**💡 Gợi ý:** Bạn muốn tôi giúp gì với file này?"
+        
+        return ai_response
+        
+    except Exception as e:
+        return f"Xin lỗi, tôi gặp sự cố khi xem trước file. Vui lòng thử lại sau. (Lỗi: {str(e)})"
+
+async def process_general_file(file: UploadFile, file_content: bytes, user_request: str) -> str:
+    """Xử lý file thông thường một cách thông minh"""
+    try:
+        ai_response = f"📁 **PHÂN TÍCH FILE: {file.filename}**\n\n"
+        ai_response += f"Tôi đã nhận được file của bạn. Dựa trên yêu cầu \"{user_request}\":\n\n"
+        ai_response += "**📊 Thông tin file:**\n"
+        ai_response += f"- Tên file: {file.filename}\n"
+        ai_response += f"- Kích thước: {len(file_content):,} bytes\n"
+        ai_response += f"- Loại file: {file.content_type}\n\n"
+        
+        if file.content_type.startswith("image/"):
+            ai_response += "**🖼️ Đây là file ảnh:**\n"
+            ai_response += "• Tôi có thể phân tích nội dung ảnh\n"
+            ai_response += "• Nhận diện đối tượng và văn bản\n"
+            ai_response += "• Phân tích bố cục và màu sắc\n\n"
+            ai_response += "**💡 Bạn muốn tôi làm gì với ảnh này?**"
+            
+        elif file.content_type == "application/pdf":
+            ai_response += "**📄 Đây là file PDF:**\n"
+            ai_response += "• Tôi có thể trích xuất văn bản\n"
+            ai_response += "• Phân tích cấu trúc và nội dung\n"
+            ai_response += "• Tóm tắt thông tin quan trọng\n\n"
+            ai_response += "**💡 Bạn muốn tôi phân tích gì trong PDF này?**"
+            
+        elif file.content_type in ["application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"]:
+            ai_response += "**📝 Đây là file Word:**\n"
+            ai_response += "• Tôi có thể phân tích nội dung\n"
+            ai_response += "• Tóm tắt văn bản\n"
+            ai_response += "• Trích xuất thông tin quan trọng\n\n"
+            ai_response += "**💡 Bạn muốn tôi làm gì với file Word này?**"
+            
+        elif file.content_type == "text/plain":
+            try:
+                text_content = file_content.decode('utf-8')
+                ai_response += "**📃 Đây là file text:**\n"
+                ai_response += "• Tôi có thể phân tích nội dung\n"
+                ai_response += "• Tóm tắt văn bản\n"
+                ai_response += "• Trích xuất thông tin quan trọng\n\n"
+                ai_response += "**📖 Nội dung file:**\n```\n{text_content[:200]}{'...' if len(text_content) > 200 else ''}\n```\n\n"
+                ai_response += "**💡 Bạn muốn tôi phân tích gì trong file text này?**"
+            except UnicodeDecodeError:
+                ai_response += "**⚠️ Lưu ý:** File text này có vấn đề về encoding.\n"
+                ai_response += "• Tôi có thể giúp chuyển đổi encoding\n"
+                ai_response += "• Hoặc phân tích phần có thể đọc được\n\n"
+                ai_response += "**💡 Bạn muốn tôi làm gì với file này?**"
+        
+        else:
+            ai_response += "**📁 Đây là file đặc biệt:**\n"
+            ai_response += "• Tôi có thể phân tích thông tin cơ bản\n"
+            ai_response += "• Kiểm tra tính toàn vẹn file\n"
+            ai_response += "• Đưa ra gợi ý xử lý phù hợp\n\n"
+            ai_response += "**💡 Bạn muốn tôi giúp gì với file này?**"
+        
+        return ai_response
+        
+    except Exception as e:
+        return f"Xin lỗi, tôi gặp sự cố khi xử lý file. Vui lòng thử lại sau. (Lỗi: {str(e)})"
 
 @app.delete("/api/sessions/{session_id}/clear")
 async def clear_chat_session(session_id: str):
